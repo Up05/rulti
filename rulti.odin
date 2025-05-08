@@ -44,7 +44,7 @@ sel_end  : int
 @(private="file")
 sel_id   : u64
 
-MeasureRune :: proc(r: rune, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTIONS) -> (advance: rl.Vector2) {
+MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS) -> (advance: rl.Vector2) {
     // Extra sh*t
     opts := opts
     using opts
@@ -108,9 +108,8 @@ MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_T
 }
 
 DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, 
-                        opts := DEFAULT_TEXT_OPTIONS) -> (new_size: vec, ok: bool) {
+                        opts := DEFAULT_TEXT_OPTIONS) -> (new_size: vec) {
     using opts
-    ok = true
     
     original_text := text
     text  := text
@@ -192,9 +191,9 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
     mouse := rl.GetMousePosition()
     // TODO opts.camera -> GetScreenToWorld2D
 
-    // Drawing wrapped text
     pos := pos
     rune_index: int
+    // Drawing lines 
     for line, line_index in lines {
         defer rune_index += len(line)
         chunk_size := MeasureTextLine(line, pos.x, opts)
@@ -205,10 +204,12 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
         o.y = (box_size.y - (size + line_spacing) * f32(len(lines))) / 2 + size/2 if center_y else 0
         o.y += f32(line_index) * ( size + line_spacing )
 
+        // Drawing individual characters 
         for r, i in line {
             advance := MeasureRune(r, pos + o)
             if advance == {} do continue
 
+            //  Checking for mouse highlighting    ( this is all slow :< )
             if  mouse.x >= pos.x + o.x && mouse.x <= pos.x + o.x + advance.x && 
                 mouse.y >= pos.y + o.y && mouse.y <= pos.y + o.y + advance.y {
                 
