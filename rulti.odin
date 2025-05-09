@@ -32,6 +32,7 @@ DEFAULT_TEXT_OPTIONS : TextOptions = {
     color        = rl.BLACK,
     background   = {},
     highlight    = { 180, 215, 255, 255 },
+    camera       = nil,
 }
 
 // Currently selected text
@@ -116,6 +117,16 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
     lines := make([dynamic] string, context.allocator)
     defer delete(lines)
     
+    cam: rl.Camera2D
+    if camera == nil {
+        cam = { 
+            zoom = 1, 
+            offset = { f32(rl.GetScreenWidth())/2, f32(rl.GetScreenHeight())/2 } 
+        }
+    } else {
+        cam = camera^
+    }
+
     cursor : int
     pcursor: int // prev cursor
     for {
@@ -188,7 +199,7 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
         sel_start, sel_end = 0, 0
     }
 
-    mouse := rl.GetMousePosition()
+    mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
     // TODO opts.camera -> GetScreenToWorld2D
 
     pos := pos
