@@ -1,12 +1,15 @@
 # Raylib addons
 
-This is a single-file library for Raylib written in odin-lang adding.
-
-It will (might) have a bunch of little things I find useful.
-
-Currently there is only text wrapping and text draw/measure functions that take in `rune` and `string`
+My collection of addons to Raylib written in odin-lang.
+Currently only the text module exists.
 
 # Text
+
+Additions:
+1. Text wrapping and caching for wrapped text
+2. Support for the Odin's `string` type, to get fewer string copies.
+3. A jumping-off point for mouse selection.
+4. Compile time loading of fonts + simpler loading of SDF fonts.
 
 ## Functions
 
