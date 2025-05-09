@@ -38,7 +38,10 @@ DEFAULT_TEXT_OPTIONS : TextOptions = {
 // Currently selected text
 // (If you are not sure about your memory, clone this string)
 selection: string
-@(private="file") // these are much more volatile
+selection_in_progress: bool
+
+// these are much more volatile
+@(private="file") 
 sel_start: int 
 @(private="file") // btw, sel_end can be less than sel_start
 sel_end  : int
@@ -116,16 +119,6 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
     text  := text
     lines := make([dynamic] string, context.allocator)
     defer delete(lines)
-    
-    cam: rl.Camera2D
-    if camera == nil {
-        cam = { 
-            zoom = 1, 
-            offset = { f32(rl.GetScreenWidth())/2, f32(rl.GetScreenHeight())/2 } 
-        }
-    } else {
-        cam = camera^
-    }
 
     cursor : int
     pcursor: int // prev cursor
@@ -188,6 +181,8 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
         }
     }
     
+    // Drawing + selection
+
     is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
     is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
 
@@ -197,10 +192,11 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
         is_mouse_start {
         sel_id = 0
         sel_start, sel_end = 0, 0
+        selection_in_progress = false
     }
 
+    cam: rl.Camera2D = camera^ if camera != nil else { zoom = 1 }
     mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
-    // TODO opts.camera -> GetScreenToWorld2D
 
     pos := pos
     rune_index: int
@@ -227,10 +223,12 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
                 if is_mouse_start {
                     sel_id = id
                     sel_start = rune_index + i
+                    selection_in_progress = true
                 } else if is_mouse_ongoing {
                     if sel_id == id {
                         sel_end   = rune_index + i
                         selection = original_text[min(sel_start, sel_end):max(sel_start, sel_end)]
+                        selection_in_progress = true
                     }
                 }
             }
