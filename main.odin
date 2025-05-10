@@ -38,47 +38,67 @@ main :: proc() {
     rl.SetTextureFilter(font.texture, .TRILINEAR)
 
     DEFAULT_TEXT_OPTIONS.font = font
+    DEFAULT_TEXT_OPTIONS.selectable = true
 
     DEFAULT_TEXT_OPTIONS.camera = &main_camera
 
     big_text: rl.RenderTexture2D
     
-    CacheTextWrapped(&big_text, LOREM, 20, { 600, 650 })
+    CacheTextWrapped(&big_text, LOREM, 20, { 600, 400 })
+
+    angle: f32
+
+    for a in Direction {
+        for b in Direction { 
+            A := int(a)
+            B := int(b)
+            fmt.print("---", a, "\t", b, "   \t")
+
+            if math.abs(A - B) % 2 == 1 do fmt.println("L")
+            if math.abs(A - B)     == 2 do fmt.println("><")
+            if                   a == b do fmt.println("<>")
+        }
+    }
 
     for !rl.WindowShouldClose() {
         rl.BeginDrawing() 
         defer rl.EndDrawing()
         rl.ClearBackground(rl.WHITE)
 
-        
-        // size: vec
-        // size = MeasureTextLine("Test test test\ttest tets", 200)
-        // rl.DrawLineV({ 200, 200 }, { 200, 200 } + size, rl.ORANGE)
-        // DrawTextLine("Test test test\ttest tets", { 200, 200 })
-
-        // size = MeasureTextLine("Test test test\ttest tets", 180)
-        // rl.DrawLineV({ 180, 240 }, { 180, 240 } + size, rl.ORANGE)
-        // DrawTextLine("Test test test\ttest tets", { 180, 240 })
-
-        // DrawTextLine("Test test test\ttest tets", { 140, 320 })
-
         rl.BeginMode2D(main_camera); 
 
-        rl.DrawRectangleLinesEx({ 20, 20,     600, 650 }, 2, rl.BLACK)
-        // DrawTextWrapped(LOREM,  { 20, 20 }, { 600, 650 })
+        mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), main_camera)
 
+        // Arrows
+        
+        rl.DrawLine(400, 600, 800, 600, rl.YELLOW)
+        rl.DrawLine(600, 400, 600, 800, rl.YELLOW)
+        DrawZagArrow({ 600, 600 }, mouse, .LEFT, .LEFT)
+
+        // Angles
+
+        rl.DrawLineV({500, 500}, { 500 + math.cos(angle)*50, 500 + math.sin(angle)*50 }, rl.BLACK)
+        switch AngleToDir(angle) {
+        case .RIGHT: rl.DrawLine(500, 500, 550, 500, rl.BLACK)
+        case .UP:    rl.DrawLine(500, 500, 500, 450, rl.BLACK)
+        case .LEFT:  rl.DrawLine(500, 500, 450, 500, rl.BLACK)
+        case .DOWN:  rl.DrawLine(500, 500, 500, 550, rl.BLACK)
+        }
+        angle += 0.001
+
+        // Text At the top
+
+        rl.DrawRectangleLinesEx({ 20, 20,     600, 400 }, 2, rl.BLACK)
+        // DrawTextWrapped(LOREM,  { 20, 20 }, { 600, 650 })
         DrawTextCached(big_text, {20, 20}, LOREM)
 
-
-
-
+        // Text at the bottom
 
         DEFAULT_TEXT_OPTIONS.background = rl.ORANGE
         size_x: f32 = 150
         size_x = math.abs(math.sin_f32(f32(rl.GetTime() / 2)) * 300)
         rl.DrawRectangleLinesEx(                     { 130, 760,    size_x, 240 }, 2, rl.BLACK)
         DrawTextWrapped("Abcd_efgh_ijkl_mnop rstu",  { 130, 760 }, { size_x, 240 })
-    
 
         DEFAULT_TEXT_OPTIONS.background = {}
         DrawTextWrapped("Abcd_efgh\n_ijkl_mnop rstu", { 430, 760 }, { size_x, 240 })
@@ -90,6 +110,8 @@ main :: proc() {
         DEFAULT_TEXT_OPTIONS.camera = nil
         DrawTextBasic(fmt.aprintf("Frame time: %.6f", rl.GetFrameTime()), { 20, f32(rl.GetScreenHeight()) - DEFAULT_TEXT_OPTIONS.size })
         
+
+
     }
 
 }
