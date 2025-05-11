@@ -15,15 +15,15 @@ Additions:
 
 ```odin
 // Draws a single line of text. (NOT YET DONE, IGNORES HIGHLIGHTING, BACKGROUND AND CENTERING)
-DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTIONS) 
+DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTIONS)
 
 // Draws the wrapped text
-DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, 
+DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
                         opts := DEFAULT_TEXT_OPTIONS) -> (new_size: vec, ok: bool)
 
 // Draws text to a texture for later use.
 // If you will allow selecting text, then save the original text's contents and options.
-CacheTextWrapped :: proc( texture: ^rl.RenderTexture2D, text: string, pos_x_for_tab: f32, box_size: rl.Vector2, 
+CacheTextWrapped :: proc( texture: ^rl.RenderTexture2D, text: string, pos_x_for_tab: f32, box_size: rl.Vector2,
                           clear_color := rl.BLANK, opts := DEFAULT_TEXT_OPTIONS) -> (new_size: vec)
 
 // Draws the texture, (maybe) created by CacheTextWrapped
@@ -32,15 +32,15 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
                         original_text := "", original_opts := DEFAULT_TEXT_OPTIONS )
 
 
-// Use with #load("path/to/file.ttf") 
-LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_count := 0x024F) -> rl.Font 
+// Use with #load("path/to/file.ttf")
+LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_count := 0x024F) -> rl.Font
 
 
 // Gets the to-be size of the rune (position does not matter unless it's a '\t')
-MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS) -> (advance: rl.Vector2) 
+MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS) -> (advance: rl.Vector2)
 
 // Same deal, ignore x_pos_for_tab if text does not contain '\t'
-MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec) 
+MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec)
 ```
 
 ## Public Variables
@@ -58,7 +58,7 @@ TextOptions :: struct {
     font         : rl.Font,
     size         : f32,
     spacing      : f32,
-    line_spacing : f32,         
+    line_spacing : f32,
     tab_width    : f32,          // tab shift character max width
     force_left   : f32,          // somewhat internal, forces everything left, except tabstops
 
@@ -72,4 +72,18 @@ TextOptions :: struct {
 
     camera       : ^rl.Camera2D, // set this if selectable = true and text is drawn in BeginMode2D(...)
 }
+```
+
+# Shapes
+
+Additions:
+1. Draw Rotated capsule using 2 points
+
+## Functions
+
+```odin
+
+// Draws a capsule
+DrawCapsule :: proc(p1, p2: rl.Vector2, radius: f32, segments : int, color: rl.Color)
+
 ```
