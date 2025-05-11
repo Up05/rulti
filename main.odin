@@ -48,17 +48,17 @@ main :: proc() {
 
     angle: f32
 
-    for a in Direction {
-        for b in Direction { 
-            A := int(a)
-            B := int(b)
-            fmt.print("---", a, "\t", b, "   \t")
+    // for a in Direction {
+    //     for b in Direction { 
+    //         A := int(a)
+    //         B := int(b)
+    //         fmt.print("---", a, "\t", b, "   \t")
 
-            if math.abs(A - B) % 2 == 1 do fmt.println("L")
-            if math.abs(A - B)     == 2 do fmt.println("><")
-            if                   a == b do fmt.println("<>")
-        }
-    }
+    //         if math.abs(A - B) % 2 == 1 do fmt.println("L")
+    //         if math.abs(A - B)     == 2 do fmt.println("><")
+    //         if                   a == b do fmt.println("<>")
+    //     }
+    // }
 
     for !rl.WindowShouldClose() {
         rl.BeginDrawing() 
@@ -74,6 +74,8 @@ main :: proc() {
         rl.DrawLine(400, 600, 800, 600, rl.YELLOW)
         rl.DrawLine(600, 400, 600, 800, rl.YELLOW)
         DrawZagArrow({ 600, 600 }, mouse, .LEFT, .LEFT)
+
+        DrawArrowHead({ 0, 0 }, angle)
 
         // Angles
 
@@ -108,8 +110,8 @@ main :: proc() {
         rl.EndMode2D()
         
         DEFAULT_TEXT_OPTIONS.camera = nil
-        DrawTextBasic(fmt.aprintf("Frame time: %.6f", rl.GetFrameTime()), { 20, f32(rl.GetScreenHeight()) - DEFAULT_TEXT_OPTIONS.size })
-        
+        // DrawTextBasic(fmt.aprintf("Frame time: %.6f", rl.GetFrameTime()), { 20, f32(rl.GetScreenHeight()) - DEFAULT_TEXT_OPTIONS.size })
+        rl.DrawFPS(20, rl.GetScreenHeight() - 20)
 
 
     }

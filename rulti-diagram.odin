@@ -2,26 +2,27 @@ package rulti
 
 import rl "vendor:raylib"
 import "core:math"
-import "core:fmt"
+
+PI :: rl.PI
 
 DiagramOptions :: struct {
     overhang: f32,      // The gap same direction arrows leave between the face and arrow
-    
 
     arrow_head: struct {
         width: f32,
         length: f32,
         groove: f32,     // [0; 1] Proportion of how much the arrow is v instead of ▼
-    
     }
-
 }
 
 DEFAULT_DIAGRAM_OPTIONS : DiagramOptions = {
     overhang = 60,
 
-
-
+    arrow_head = {
+        width  = 8,
+        length = 8,
+        groove = 0.6, // this is not mathing that great, but: who cares?
+    }
 }
 
 // Step :: struct(T: typeid) {
@@ -34,23 +35,28 @@ DEFAULT_DIAGRAM_OPTIONS : DiagramOptions = {
 Direction :: enum { RIGHT, DOWN, LEFT, UP }
 
 AngleToDir :: proc(radians: f32) -> Direction {
-    // cast(Direction)  0 * (PI/2) = RIGHT 
-    // cast(Direction)  1 * (PI/2) = DOWN
-    // cast(Direction)  2 * (PI/2) = LEFT
-    // cast(Direction)  3 * (PI/2) = UP
+    // 0 * (PI/2) = RIGHT 
+    // 1 * (PI/2) = DOWN
+    // 2 * (PI/2) = LEFT
+    // 3 * (PI/2) = UP
 
-    PI :: 3.14159265358979323846
-    
     coef := radians / (PI/2)
     coef_int := i32(math.round(coef))
-    DrawTextBasic(fmt.aprint(Direction(coef_int % 4)), { 550, 500 })
     return Direction(coef_int % 4)
 }
 
 // direction is in radians (0 to 2PI)
-DrawArrowHead :: proc(pos: rl.Vector2, dir: f32) {
-    
+DrawArrowHead :: proc(pos: rl.Vector2, dir: f32, opts := DEFAULT_DIAGRAM_OPTIONS) {
+    using opts.arrow_head
+    v :: proc(y, x: f32) -> rl.Vector2 { return { x, y } }
+    tip  := v(math.sincos_f32(dir))                * length 
+    a    := v(math.sincos_f32(dir + (2.0/3.0)*PI)) * length
+    back := v(math.sincos_f32(dir - PI))           * length/2 * (groove*2 - 1)
+    b    := v(math.sincos_f32(dir - (2.0/3.0)*PI)) * length
 
+    rl.DrawTriangleFan(raw_data([] rl.Vector2 { 
+        tip + pos, b + pos, back + pos, a + pos 
+    }), 4, rl.BLACK)
 }
 
 // ----+
@@ -112,6 +118,10 @@ DrawZagArrow :: proc(a, b: rl.Vector2, a_side, b_side: Direction, opts := DEFAUL
             rl.DrawLineV({ X1, Y3 }, { X1, Y1 }, rl.BLACK)
         }
     }
+
+
+    DrawArrowHead(b, f32(b_side) * (PI/2) + PI)
+
     return
 }
 
