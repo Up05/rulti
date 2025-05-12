@@ -83,7 +83,7 @@ Additions:
 
 ```odin
 
-// Draws a 2D capsule (stadium). The point are a radius away from the highest/lowest point.
+// Draws a 2D capsule (stadium). The points are a radius away from the highest/lowest point.
 DrawCapsule2D :: proc(p1, p2: rl.Vector2, radius: f32, segments : int, color: rl.Color)
 
 ```
