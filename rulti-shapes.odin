@@ -5,7 +5,7 @@ import rl "vendor:raylib"
 import "core:math"
 import "core:math/linalg"
 
-DrawCapsule :: proc(p1, p2: rl.Vector2, radius: f32, segments : int, color: rl.Color) {
+DrawCapsule2D :: proc(p1, p2: rl.Vector2, radius: f32, segments: int, color: rl.Color) {
 	dir := p2 - p1
 	len := linalg.length(dir)
 	if len == 0.0 {

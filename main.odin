@@ -69,8 +69,8 @@ main :: proc() {
 
         DrawTextCached(big_text, {20, 20}, LOREM)
 
-        DrawCapsule({100, -100}, {100, -300}, 50, 16, rl.RED)
-        DrawCapsule({300, -100}, {450, -300}, 50, 16, rl.BLUE)
+        DrawCapsule2D({100, -100}, {100, -300}, 50, 16, rl.RED)
+        DrawCapsule2D({300, -100}, {450, -300}, 50, 16, rl.BLUE)
 
         DEFAULT_TEXT_OPTIONS.background = rl.ORANGE
         size_x: f32 = 150
