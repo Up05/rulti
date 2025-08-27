@@ -1,5 +1,6 @@
 package rulti
 
+import "core:fmt"
 import rl "vendor:raylib"
 
 vec :: rl.Vector2
@@ -86,8 +87,8 @@ DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTION
         rl.DrawTextCodepoint(font, r, pos + offset, size, color)
                 
         glyph := rl.GetGlyphIndex(font, r)
-        advance := f32(font.glyphs[glyph].advanceX)
-        offset.x += (advance if advance != 0 else font.recs[glyph].width) * scaling + spacing
+        advance1 := f32(font.glyphs[glyph].advanceX)
+        offset.x += (advance1 if advance1 != 0 else font.recs[glyph].width) * scaling + spacing
         if r == '\t' {
             offset.x += tab_width - f32(i32(pos.x + offset.x)%i32(tab_width))
         }
@@ -140,17 +141,16 @@ SplitTextIntoLines :: proc( text: string, pos: rl.Vector2, box_size: rl.Vector2,
             if pcursor == 0 {
                 x: f32
                 p: int // previous i
-                i: int
-                for ; i < len(text[:cursor]); i += 1 { // fix this to support utf8
-                    x += MeasureTextLine(text[i:i+1]).x
-                    if x >= box_size.x {
-                        append(&lines, text[p:i])
-                        p = i + 1
+                for r, i in text[:cursor] {
+                    x += MeasureRune(r).x
+                    if x >= box_size.x && i > 0 {
+                        append(&lines, text[p:i - 1])
+                        p = i
                         x = 0
                     }
                 }
-
-                append(&lines, text[p:cursor])
+            
+                append(&lines, text[p + 1:cursor])
                 text = text[cursor:]
             } else {
                 // Wrapping over non-printable characters & space
