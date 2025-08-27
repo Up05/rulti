@@ -2,6 +2,8 @@ package rulti
 
 import rl "vendor:raylib"
 
+vec :: rl.Vector2
+
 TextOptions :: struct {
     font         : rl.Font,
     size         : f32,
@@ -57,7 +59,7 @@ MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS)
     if font.texture.id == 0 do font = rl.GetFontDefault()
     if r < ' ' && r != '\t' do return
     scaling := size / f32(font.baseSize)
-
+    
     // Advance
     glyph := rl.GetGlyphIndex(font, r)
     advance1 := f32(font.glyphs[glyph].advanceX)
@@ -125,7 +127,7 @@ SplitTextIntoLines :: proc( text: string, pos: rl.Vector2, box_size: rl.Vector2,
     text := text
     lines = make([dynamic] string, context.allocator)
     cursor : int
-    pcursor: int // prev cursor
+    pcursor: int // previous cursor
     for {
         cursor = find_space_from(text, cursor + 1)
         defer pcursor = cursor

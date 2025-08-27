@@ -4,8 +4,6 @@ import rl "vendor:raylib"
 import "core:math"
 import "core:fmt"
 
-vec :: rl.Vector2
-
 // LOREM :: `
 // Lorem ipsum dolor sit amet, consectetur adipiscing elit. In ultricies, quam quis viverra pharetra, lacus ligula imperdiet velit, sed cursus arcu justo non mi. Mauris elementum, nibh commodo tempus auctor, ante lectus finibus enim, et elementum eros ligula sed est. Duis mollis, dui vel pharetra dapibus, nisi tellus aliquam libero, non
 //
@@ -75,7 +73,7 @@ main :: proc() {
         DEFAULT_TEXT_OPTIONS.background = rl.ORANGE
         size_x: f32 = 150
         size_x = math.abs(math.sin_f32(f32(rl.GetTime() / 2)) * 300)
-        rl.DrawRectangleLinesEx(                     { 130, 760,    size_x, 240 }, 2, rl.BLACK)
+        rl.DrawRectangleLinesEx(                     { 130, 760,     size_x, 240 }, 2, rl.BLACK)
         DrawTextWrapped("Abcd_efgh_ijkl_mnop rstu",  { 130, 760 }, { size_x, 240 })
 
 
