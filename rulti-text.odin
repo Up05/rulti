@@ -233,7 +233,7 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
 
         // Drawing individual characters 
         for r, i in line {
-            advance := MeasureRune(r, pos + o)
+            advance := MeasureRune(r, pos + o, opts)
             if advance == {} do continue
 
             //  Checking for mouse highlighting    ( this is all slow :< )
@@ -265,12 +265,16 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
                rl.DrawRectangleV(pos + o + shift, advance, background) 
             }
 
+            if r == '\t' do continue
 
             rl.DrawTextCodepoint(font, r, floor_vec(pos + o + shift), size, color)
-            o.x += advance.x
+            o.x += advance.x + spacing
+            new_size.x = max(new_size.x, o.x)
         }
         
     }
+
+    new_size.y = f32(len(lines)) * ( size + line_spacing )
 
     return
 }
@@ -342,7 +346,7 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
 
             // Individual characters
             for r, i in line {
-                advance := MeasureRune(r, pos + o)
+                advance := MeasureRune(r, pos + o, original_opts)
                 if advance == {} do continue
 
                 //  Checking for mouse highlighting
@@ -386,7 +390,7 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
 // 0x7F   = end of ASCII
 // for others: https://en.wikipedia.org/wiki/List_of_Unicode_characters
 // SDF allows for better scaling of the font when compared to default(rasterization)
-LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_count := 0x024F) -> rl.Font {
+LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_count := 0x024F, filter := rl.TextureFilter.TRILINEAR) -> rl.Font {
     font: rl.Font
 
     font.baseSize = i32(text_size)
@@ -398,6 +402,8 @@ LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_co
     atlas := rl.GenImageFontAtlas(font.glyphs, &font.recs, font.glyphCount, font.baseSize, 4, 0);
     font.texture = rl.LoadTextureFromImage(atlas);
     rl.UnloadImage(atlas);
+
+    rl.SetTextureFilter(font.texture, filter)
     
     return font
 }
