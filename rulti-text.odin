@@ -1,6 +1,5 @@
 package rulti
 
-import "core:fmt"
 import rl "vendor:raylib"
 
 vec :: rl.Vector2
@@ -72,6 +71,30 @@ MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS)
     return
 }
 
+// don't worry about x_pos_for_tab too much, especially for centered text
+// because I just do not believe that a text that is centered should ever contain tabs. 
+MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec) {
+    using opts
+
+    assert(font.texture.id != 0, "MeasureText was given a bad font")
+    if len(text) == 0 do return 
+    
+    scaling := size / f32(font.baseSize)
+    
+    for r, i in text {
+        if r < ' ' && r != '\t' do continue
+        glyph := rl.GetGlyphIndex(font, r)
+        advance := f32(font.glyphs[glyph].advanceX)
+        text_size.x += (advance if advance != 0 else font.recs[glyph].width) * scaling + spacing
+        if r == '\t' {
+            text_size.x += tab_width - f32(i32(x_pos_for_tab + text_size.x)%i32(tab_width))
+        }
+    }
+
+    text_size.y = size + line_spacing
+    return
+}
+
 // Draws a single line text. No centering, selection or '\n' handling.
 DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec) {
     opts := opts
@@ -98,33 +121,9 @@ DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTION
     return { offset.x, size + line_spacing }
 }
 
-// don't worry about x_pos_for_tab too much, especially for centered text
-// because I just do not believe that a text that is centered would ever contain tabs. 
-MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec) {
-    using opts
-
-    assert(font.texture.id != 0, "MeasureText was given a bad font")
-    if len(text) == 0 do return 
-    
-    scaling := size / f32(font.baseSize)
-    
-    for r, i in text {
-        if r < ' ' && r != '\t' do continue
-        glyph := rl.GetGlyphIndex(font, r)
-        advance := f32(font.glyphs[glyph].advanceX)
-        text_size.x += (advance if advance != 0 else font.recs[glyph].width) * scaling + spacing
-        if r == '\t' {
-            text_size.x += tab_width - f32(i32(x_pos_for_tab + text_size.x)%i32(tab_width))
-        }
-    }
-
-    text_size.y = size + line_spacing
-    return
-}
-
 // Less useful for user. Wraps text into new lines.
-SplitTextIntoLines :: proc( text: string, pos: rl.Vector2, box_size: rl.Vector2, 
-                            opts := DEFAULT_TEXT_OPTIONS) -> (lines: [dynamic] string) {
+SplitTextIntoLines :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, 
+                           opts := DEFAULT_TEXT_OPTIONS) -> (lines: [dynamic] string) {
     text := text
     lines = make([dynamic] string, context.allocator)
     cursor : int
@@ -143,19 +142,19 @@ SplitTextIntoLines :: proc( text: string, pos: rl.Vector2, box_size: rl.Vector2,
                 p: int // previous i
                 for r, i in text[:cursor] {
                     x += MeasureRune(r).x
-                    if x >= box_size.x && i > 0 {
-                        append(&lines, text[p:i - 1])
-                        p = i
+                    if x >= box_size.x {
+                        append(&lines, text[p:i])
+                        p = i + 1
                         x = 0
                     }
                 }
             
-                append(&lines, text[p + 1:cursor])
+                append(&lines, text[p:cursor])
                 text = text[cursor:]
             } else {
                 // Wrapping over non-printable characters & space
                 append(&lines, text[:pcursor])
-                text = text[pcursor + 1:]
+                text = text[pcursor:]
             }
             pcursor = 0
             cursor = 0
@@ -170,7 +169,7 @@ SplitTextIntoLines :: proc( text: string, pos: rl.Vector2, box_size: rl.Vector2,
                 cursor  = 0
 
                 // For ..<macOS 9 remove '+ 1' on line with 'text ='
-                // and uncomment this line:
+                // uncomment this line:  (and hope)
                 // if 1 < len(text) && text[1] == '\n' do text = text[1:] 
 
             } else if text[cursor] == '\n' { // Else: \n
@@ -268,7 +267,7 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
             if r == '\t' do continue
 
             rl.DrawTextCodepoint(font, r, floor_vec(pos + o + shift), size, color)
-            o.x += advance.x + spacing
+            o.x += advance.x
             new_size.x = max(new_size.x, o.x)
         }
         
