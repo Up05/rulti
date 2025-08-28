@@ -25,21 +25,6 @@ DrawCapsule2D :: proc(p1, p2: rl.Vector2, radius: f32, segments: int, color: rl.
 	rl.DrawTriangle(v3, v2, v1, color)
 	rl.DrawTriangle(v1, v4, v3, color)
 
-	rl.DrawCircleSector(
-		cast(rl.Vector2)p1,
-		radius,
-		angle + 270.0,
-		angle + 90.0,
-		i32(segments),
-		color
-	)
-
-	rl.DrawCircleSector(
-		cast(rl.Vector2)p2,
-		radius,
-		angle - 90.0,
-		angle + 90.0,
-		i32(segments),
-		color
-	)
+	rl.DrawCircleSector(cast(rl.Vector2)p1, radius, angle + 270.0, angle + 90.0, i32(segments), color)
+    rl.DrawCircleSector(cast(rl.Vector2)p2, radius, angle -  90.0, angle + 90.0, i32(segments), color)
 }

@@ -9,6 +9,12 @@ LOREM :: `
 Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
 
 Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
+
+Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
+
+Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
+
+Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis. Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
 `
 
 main_camera: rl.Camera2D = { zoom = 1 }
@@ -19,7 +25,7 @@ main :: proc() {
     rl.SetConfigFlags({ .WINDOW_RESIZABLE, .MSAA_4X_HINT })
 
     rl.InitWindow(1280, 720, "UML Generatorius")
-    // rl.SetTargetFPS(60)
+    rl.SetTargetFPS(60)
 
     font_data, _ := base64.decode(THE_FONT) 
     font := LoadFontFromMemory(font_data, 24, false)
@@ -29,12 +35,15 @@ main :: proc() {
     DEFAULT_TEXT_OPTIONS.font = font
 
     DEFAULT_TEXT_OPTIONS.camera = &main_camera
+    DEFAULT_UI_OPTIONS.camera   = &main_camera
     DEFAULT_TEXT_OPTIONS.spacing = 2
     DEFAULT_TEXT_OPTIONS.center_x = false
 
     big_text: rl.RenderTexture2D
 
-    CacheTextWrapped(&big_text, LOREM, 20, { 600, 650 })
+    new_size := CacheTextWrapped(&big_text, LOREM, 20, { 600, 650 })
+
+    scroll: Scroll = { max = new_size }
 
     for !rl.WindowShouldClose() {
         rl.BeginDrawing()
@@ -45,8 +54,9 @@ main :: proc() {
 
         rl.DrawRectangleLinesEx({ 20, 20,     600, 650 }, 2, rl.BLACK)
 
-        // big block of text
-        DrawTextCached(big_text, { 20, 20 }, LOREM)
+        // big, scrollable, block of text
+        DrawTextCached(big_text, { 20, 20 } - scroll.pos, LOREM)
+        DrawScrollbar(&scroll, { 20, 20 }, { 600, 650 })
 
         // bottom left text
         DEFAULT_TEXT_OPTIONS.background = rl.ORANGE
@@ -65,8 +75,9 @@ main :: proc() {
         DrawCapsule2D({100, -100}, {100, -300}, 50, 16, rl.RED)
         DrawCapsule2D({300, -100}, {450, -300}, 50, 16, rl.BLUE)
 
-        if !selection_in_progress && rl.IsMouseButtonDown(.LEFT) do main_camera.target -= rl.GetMouseDelta()
-
+        if !selection_in_progress && !IsAnyScrollbarDragged() && rl.IsMouseButtonDown(.LEFT) { 
+            main_camera.target -= rl.GetMouseDelta()
+        }
         rl.EndMode2D()
 
         DEFAULT_TEXT_OPTIONS.camera = nil
