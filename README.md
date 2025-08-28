@@ -90,7 +90,7 @@ DrawCapsule2D :: proc(p1, p2: rl.Vector2, radius: f32, segments : int, color: rl
 
 Additions:
 1. Scrollbar
-2. The Gruvbox colorscheme values (I just want them somewhere, okay!)
+2. The Gruvbox colorscheme values (I just want them somewhere, okay!?)
 3. Inset and outset borders
 
 ## Functions
@@ -138,18 +138,7 @@ DrawBorderOutset :: proc(pos, size: rl.Vector2, darker, brighter: rl.Color, thic
 
 ```odin
 
-DEFAULT_UI_OPTIONS : UIOptions = {
-    scroll = {
-        width           = 20,
-        track_bg        = rl.GRAY,
-        thumb_bg        = rl.LIGHTGRAY,
-        corner_bg       = rl.GRAY - 32,
-        border_dark     = rl.WHITE,
-        border_bright   = rl.BLACK,
-        speed_maintain  = 0.825,
-        speed           = 20,
-    }
-}
+DEFAULT_UI_OPTIONS : UIOptions
 
 // Valid colors:
 // 
@@ -183,13 +172,11 @@ UIOptions :: struct {
     }
 }
 
-// 'vel' and 'id' are "private"
-// 'max' should be set initially (or later)
-// 'pos' should be considered each frame in: my_pos -= scroll.pos
 Scroll :: struct {
-    pos, vel  : rl.Vector2,
-    max       : rl.Vector2,
-    id        : u64,
+    pos : rl.Vector2, // should be considered each frame in: my_pos -= scroll.pos
+    max : rl.Vector2, // should be set to size of the entire scrollable thing
+    vel : rl.Vector2, // private-ish
+    id  : u64,        // private-ish
 }
 ``` 
 
