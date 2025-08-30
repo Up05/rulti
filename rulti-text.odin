@@ -1,7 +1,6 @@
 package rulti
 
 import rl "vendor:raylib"
-import "core:fmt"
 
 vec :: rl.Vector2
 

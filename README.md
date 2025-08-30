@@ -1,6 +1,6 @@
 # Raylib addons
 
-My collection of addons to Raylib written in odin-lang.
+My collection of addons to Raylib written in odin-lang.  
 Files are mostly independent and may be deleted, HOWEVER
 2 functions in the UI module depend on the Text module.
 
@@ -201,6 +201,7 @@ TextInput :: struct {
     events : bit_set [TextInputEvent], // options are: { SUBMIT, ESCAPE, CHANGE }
     
     placeholder : string, // the text shown when text box is empty
+    // TODO: shell-like history, undo/redo, fish-like ghost-text (examples in fish shell, zsh-autosuggestions and up05/oi)
 
     rune_positions : [dynamic] f32, // private, (pixel offsets by bytes + ..[0] = 0 after UpdateTextInput() )
     cursor_timeout : int,   // private, cursor timeout in frames
