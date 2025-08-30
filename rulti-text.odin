@@ -1,6 +1,7 @@
 package rulti
 
 import rl "vendor:raylib"
+import "core:fmt"
 
 vec :: rl.Vector2
 
@@ -44,12 +45,9 @@ selection: string
 selection_in_progress: bool
 
 // These are much more volatile
-@(private="file") 
-sel_start: int 
-@(private="file") // btw, sel_end can be less than sel_start
-sel_end  : int
-@(private="file")
-sel_id   : u64
+@(private) sel_start : int 
+@(private) sel_end   : int // btw, sel_end can be less than sel_start 
+@(private) sel_id    : u64
 
 // Returns the size of a rune accounted for TextOptions.
 MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS) -> (advance: rl.Vector2) {
@@ -101,6 +99,20 @@ DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTION
     using opts
     if font.texture.id == 0 do font = rl.GetFontDefault()
         
+    // Selection
+    is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
+    is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
+
+    id := transmute(u64) pos
+
+    if sel_id == id && is_mouse_start {
+        sel_id = 0
+        sel_start, sel_end = 0, 0
+        selection_in_progress = false
+    }
+    cam: rl.Camera2D = camera^ if camera != nil else { zoom = 1 }
+    mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
+
     scaling := size / f32(font.baseSize)
     offset: vec
     for r, i in text {
@@ -111,12 +123,37 @@ DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTION
                 
         glyph := rl.GetGlyphIndex(font, r)
         advance1 := f32(font.glyphs[glyph].advanceX)
-        offset.x += (advance1 if advance1 != 0 else font.recs[glyph].width) * scaling + spacing
+        advance  := (advance1 if advance1 != 0 else font.recs[glyph].width) * scaling + spacing
+        offset.x += advance
         if r == '\t' {
             offset.x += tab_width - f32(i32(pos.x + offset.x)%i32(tab_width))
         }
+
+        //  Checking for mouse highlighting 
+        ax := pos.x + offset.x - advance
+        bx := advance
+        if selectable && rl.CheckCollisionPointRec(mouse, { ax, pos.y, bx, opts.size }) {
+            
+            if is_mouse_start {
+                sel_id = id
+                sel_start = i
+                sel_end   = i
+                selection_in_progress = true
+            } else if is_mouse_ongoing && sel_id == id {
+                sel_end = i
+                selection = text[min(sel_start, sel_end):max(sel_start, sel_end)]
+                selection_in_progress = true
+            }
+        }
     }
     
+    if selectable {
+        pmouse := mouse - rl.GetMouseDelta()
+        a := rl.CheckCollisionPointRec(pmouse, { pos.x, pos.y, offset.x, size + line_spacing })
+        b := rl.CheckCollisionPointRec(mouse,  { pos.x, pos.y, offset.x, size + line_spacing })
+        if !a && b { rl.SetMouseCursor(.IBEAM) }
+        if a && !b { rl.SetMouseCursor(.DEFAULT) }
+    }
 
     return { offset.x, size + line_spacing }
 }
@@ -206,7 +243,7 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
     is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
     is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
 
-    id := transmute(u64) raw_data(original_text)
+    id := transmute(u64) pos
 
     if sel_id == id && is_mouse_start {
         sel_id = 0
@@ -236,20 +273,20 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
             if advance == {} do continue
 
             //  Checking for mouse highlighting    ( this is all slow :< )
-            if selectable && 
-               mouse.x >= pos.x + o.x && mouse.x <= pos.x + o.x + advance.x && 
-               mouse.y >= pos.y + o.y && mouse.y <= pos.y + o.y + advance.y {
-                
+            a := pos + o
+            b := advance
+            if  selectable && 
+                rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, box_size.x, box_size.y }) &&
+                rl.CheckCollisionPointRec(mouse, { a.x, a.y, b.x, b.y }) {
+
                 if is_mouse_start {
                     sel_id = id
                     sel_start = rune_index + i
                     selection_in_progress = true
-                } else if is_mouse_ongoing {
-                    if sel_id == id {
-                        sel_end   = rune_index + i
-                        selection = original_text[min(sel_start, sel_end):max(sel_start, sel_end)]
-                        selection_in_progress = true
-                    }
+                } else if is_mouse_ongoing && sel_id == id  {
+                    sel_end = rune_index + i
+                    selection = original_text[min(sel_start, sel_end):max(sel_start, sel_end)]
+                    selection_in_progress = true
                 }
             }
 
@@ -270,10 +307,19 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
             o.x += advance.x
             new_size.x = max(new_size.x, o.x)
         }
-        
     }
 
     new_size.y = f32(len(lines)) * ( size + line_spacing )
+
+    if selectable {
+        pmouse := mouse - rl.GetMouseDelta()
+        rec := rl.Rectangle { pos.x, pos.y, min(box_size.x, new_size.x), min(box_size.y, new_size.y) }
+        a := rl.CheckCollisionPointRec(pmouse, rec)
+        b := rl.CheckCollisionPointRec(mouse,  rec)
+        if !a && b { rl.SetMouseCursor(.IBEAM) }
+        if a && !b { rl.SetMouseCursor(.DEFAULT) }
+    }
+
 
     return
 }
@@ -313,6 +359,9 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
     // Basically just copied from DrawTextWrapped. There for selection
     is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
     is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
+
+    cam: rl.Camera2D = camera^ if camera != nil else { zoom = 1 }
+    mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
     
     // Selecting text is slow af and it just does not matter
     if is_mouse_start || is_mouse_ongoing || sel_id != 0 {
@@ -320,16 +369,13 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
         lines := SplitTextIntoLines(text, pos, box_size, original_opts)
         defer delete(lines)
 
-        id := transmute(u64) raw_data(original_text)
+        id := transmute(u64) pos
 
         if sel_id == id && is_mouse_start {
             sel_id = 0
             sel_start, sel_end = 0, 0
             selection_in_progress = false
         }
-
-        cam: rl.Camera2D = camera^ if camera != nil else { zoom = 1 }
-        mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
 
         pos := pos
         rune_index: int
@@ -349,9 +395,11 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
                 if advance == {} do continue
 
                 //  Checking for mouse highlighting
-                if selectable &&
-                   mouse.x >= pos.x + o.x && mouse.x <= pos.x + o.x + advance.x && 
-                   mouse.y >= pos.y + o.y && mouse.y <= pos.y + o.y + advance.y {
+                a := pos + o
+                b := advance
+                if  selectable && 
+                    rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, box_size.x, box_size.y }) &&
+                    rl.CheckCollisionPointRec(mouse, { a.x, a.y, b.x, b.y }) {
 
                     if is_mouse_start {
                         sel_id = id
@@ -371,7 +419,6 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
                 if sel_id == id &&
                    rune_index + i >= min(sel_start, sel_end) && 
                    rune_index + i <= max(sel_start, sel_end) {
-
                     rl.DrawRectangleV(pos + o + shift, advance, highlight) 
                 }
 
@@ -380,8 +427,16 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
         }
     }
 
-
     rl.DrawTextureRec(tex, { 0, 0, f32(tex.width), - f32(tex.height) }, pos, rl.WHITE)
+
+    if selectable {
+        pmouse := mouse - rl.GetMouseDelta()
+        rec := rl.Rectangle { pos.x, pos.y, min(box_size.x, f32(tex.width)), min(box_size.y, f32(tex.height)) }
+        a := rl.CheckCollisionPointRec(pmouse, rec)
+        b := rl.CheckCollisionPointRec(mouse,  rec)
+        if !a && b { rl.SetMouseCursor(.IBEAM) }
+        if a && !b { rl.SetMouseCursor(.DEFAULT) }
+    }
 }
 
 // These are probably correct, I didn't really check

@@ -3,6 +3,10 @@ package rulti
 import rl "vendor:raylib"
 import "core:math/rand"
 
+import "core:unicode/utf8"
+import "core:strings"
+import "base:runtime"
+
 /**
     This file contains addons to raylib 
     that may come in handy when making UI.
@@ -80,6 +84,7 @@ gruvbox : [GruvboxPalette] rl.Color = {
 
 UIOptions :: struct {
     camera : ^rl.Camera2D,
+
     scroll : struct {
         width          : f32,
         track_bg       : rl.Color,
@@ -89,6 +94,14 @@ UIOptions :: struct {
         border_bright  : rl.Color,
         speed_maintain : f32,
         speed          : f32,
+    },
+    input : struct {
+        cursor_blink_rate : int,
+        border_dark       : rl.Color,
+        border_bright     : rl.Color,
+        selection_bg      : rl.Color,
+        placeholder_fg    : rl.Color,
+
     }
 }
 
@@ -102,7 +115,14 @@ DEFAULT_UI_OPTIONS : UIOptions = {
         border_bright   = rl.BLACK,
         speed_maintain  = 0.825,
         speed           = 20,
-    }
+    },
+    input = {
+        cursor_blink_rate = 30, // frames
+        border_dark       = rl.BLACK,
+        border_bright     = rl.WHITE,
+        selection_bg      = rl.BLUE,
+        placeholder_fg    = rl.GRAY,
+    },
 }
 
 Scroll :: struct {
@@ -299,4 +319,319 @@ DrawBorderInset :: proc(pos, size: rl.Vector2, darker, brighter: rl.Color, thick
 // 🮉▁🭿 this makes the rectangle look like it pops out of ...
 DrawBorderOutset :: proc(pos, size: rl.Vector2, darker, brighter: rl.Color, thicker := false) {
     DrawBorderInset(pos, size, brighter, darker, thicker)
+}
+
+// Clear these the frame you "notice" them, (it's night by now)
+// TODO "consumer" function or smth?
+TextInputEvent :: enum {
+    SUBMIT, // enter was pressed
+    ESCAPE, // the buffer was made inactive (through .ESCAPE)
+    CHANGE, // text buffer changed in some way
+}
+
+TextInput :: struct {
+    text   : [dynamic] u8,   
+    cursor : int,
+    select : int,
+    active : bool,
+    events : bit_set [TextInputEvent],
+    
+    placeholder : string, // the text shown when text box is empty
+
+    rune_positions : [dynamic] f32,  
+    cursor_timeout : int,
+    cursor_visible : bool,
+}
+
+DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
+                      opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS) {
+
+    mouse := rl.GetMousePosition()
+    mouse  = rl.GetScreenToWorld2D(mouse, opts.camera^) if opts.camera != nil else mouse
+    
+    DrawBorderInset(pos, size, opts.input.border_dark, opts.input.border_bright)
+
+    if len(input.text) == 0 {
+        text_opts := text_opts
+        text_opts.color = opts.input.placeholder_fg
+        DrawTextBasic(input.placeholder, pos, text_opts)
+    }
+
+    if input.active {
+        // Background
+        rl.DrawRectangleV(pos, size, { 0, 0, 0, 25 }) // todo opts.input.active_tint
+
+        // !Important!
+        UpdateTextInput(input, pos, size, opts, text_opts)
+    }
+
+    // When text box is overflowing
+    cursor_pixel_offset := input.rune_positions[max(input.cursor, input.select)] if len(input.text) > 0 else 0
+    if cursor_pixel_offset > size.x {
+        rl.BeginScissorMode(i32(pos.x), i32(pos.y), i32(size.x), i32(size.y))
+    }
+
+    offset: rl.Vector2 = { max(cursor_pixel_offset - size.x, 0), 0 }
+
+    selecting_range := input.cursor != input.select
+    if input.active && selecting_range {
+        x := input.rune_positions[min(input.cursor, input.select)]
+        w := input.rune_positions[max(input.cursor, input.select)] - x 
+        
+        rl.DrawRectangleV(pos + { x, 0 } - offset, { w, size.y }, opts.input.selection_bg)
+    }
+  
+    text_opts := text_opts
+    text_opts.selectable = true
+    text_size := DrawTextBasic(string(input.text[:]), pos - offset, text_opts)
+
+    if transmute(u64) (pos - offset) == sel_id {
+        input.cursor = min(sel_start, len(input.text) - 1)
+        input.select = min(sel_end, len(input.text) - 1)
+    }
+
+    { // Mouse cursor
+        pmouse := mouse - rl.GetMouseDelta()
+        a := rl.CheckCollisionPointRec(pmouse, { pos.x, pos.y, size.x, size.y })
+        b := rl.CheckCollisionPointRec(mouse,  { pos.x, pos.y, size.x, size.y })
+        if !a && b { rl.SetMouseCursor(.IBEAM) }
+        if a && !b { rl.SetMouseCursor(.DEFAULT) }
+    }
+
+    if input.active && !selecting_range {
+        input.cursor_timeout -= 1
+        if input.cursor_timeout < 0 {
+            input.cursor_timeout  = opts.input.cursor_blink_rate
+            input.cursor_visible = !input.cursor_visible
+        }
+        if input.cursor_visible {
+            x := pos.x + input.rune_positions[min(input.cursor, input.select)]
+            rl.DrawLineV({ x, pos.y } - offset, { x, pos.y + text_size.y }, text_opts.color)
+        }
+    }
+
+    if cursor_pixel_offset > size.x {
+        rl.EndScissorMode()
+    }
+}
+
+// Called automatically, but can still be called by user when the input is actually hidden
+UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
+                        opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS) {
+
+    // Initialization
+    stride := &input.rune_positions
+    buffer := &input.text
+    cursor := input.cursor
+    select := input.select
+    defer { input.cursor = cursor; input.select = select }
+    if len(stride) == 0 { append(stride, 0) } // should only be done once...
+
+    // Normal letters and characters
+    if char := rl.GetCharPressed(); char != 0 {
+        if select != cursor {
+            remove_range(buffer, min(select, cursor), max(select, cursor))
+            cursor = min(cursor, select)
+            select = cursor
+        }
+
+        buf, n := utf8.encode_rune(char)
+        inject_at_elem_string(buffer, cursor, string(buf[:n]))
+        inject_positions(input, cursor, string(buf[:n]), text_opts)
+        cursor += n
+        select += n
+
+        input.events += { .CHANGE }
+        return
+    }
+
+    ctrl  := rl.IsKeyDown(.LEFT_CONTROL) || rl.IsKeyDown(.RIGHT_CONTROL)
+    shift := rl.IsKeyDown(.LEFT_SHIFT)   || rl.IsKeyDown(.RIGHT_SHIFT)
+    is    := proc(key: rl.KeyboardKey) -> bool { return rl.IsKeyPressed(key) || rl.IsKeyPressedRepeat(key) }
+
+    // Keyboard shortcuts
+    switch {// {{{
+    case is(.ENTER)  : input.events += { .SUBMIT }
+    case is(.ESCAPE) : input.events += { .ESCAPE }
+    case is(.BACKSPACE):
+        if cursor == 0 do break
+
+        if select != cursor {
+            hi := max(select, cursor) // as in "hi-fi", a.k.a.: "up to" (I use it elsewhere too)
+            delete_range(input, min(select, cursor), hi, text_opts)
+            cursor = min(cursor, select)
+            select = cursor
+        } else if ctrl {
+            start := strings.last_index_byte(string(buffer[:cursor-1]), ' ') + 1
+            delete_range(input, start, cursor, text_opts)
+            cursor = start
+            select = start
+        } else {
+            size := last_rune_size(buffer[:cursor])
+            delete_range(input, cursor - size, cursor, text_opts)
+            cursor -= size
+            select -= size
+        }
+
+        input.events += { .CHANGE }
+
+    case is(.DELETE):
+        if cursor > len(buffer) do return
+
+        if select != cursor {
+            hi := max(select, cursor) // as in hi-fi, a.k.a.: "to" (I use it elsewhere too)
+            delete_range(input, min(select, cursor), hi, text_opts)
+            cursor = min(cursor, select)
+            select = cursor
+        } else if ctrl {
+            start := strings.index_byte(string(buffer[cursor:]), ' ') 
+            start = len(buffer) if start == -1 else ( start + cursor + 1 )
+            delete_range(input, cursor, start, text_opts)
+        } else {
+            _, size := utf8.decode_rune(buffer[cursor:])
+            delete_range(input, cursor, cursor + size, text_opts)
+        }
+
+        input.events += { .CHANGE }
+
+    case is(.LEFT):
+        input.cursor_visible = true
+        input.cursor_timeout = opts.input.cursor_blink_rate
+
+        cursor = min(max(cursor, 0), len(buffer))
+        select = min(max(select, 0), len(buffer))
+
+        if cursor != select && !shift {
+            cursor = min(cursor, select)
+            select = cursor
+            return
+        }
+
+        if ctrl {
+            space_skip := (1 * int(select > 0))
+            space := strings.last_index_byte(string(buffer[:select - space_skip]), ' ')
+            select = (space + space_skip) if space != -1 else 0
+            
+            if !shift do cursor = select
+            return
+        }
+
+        select -= last_rune_size(buffer[:min(cursor, select)])
+        select = max(select, 0)
+        if !shift do cursor = select
+
+    case is(.RIGHT):
+        input.cursor_visible = true
+        input.cursor_timeout = opts.input.cursor_blink_rate
+
+        end_size := last_rune_size(buffer[:])
+        cursor = min(max(cursor, 0), len(buffer))
+        select = min(max(select, 0), len(buffer))
+
+        if cursor != select && !shift {
+            cursor = max(cursor, select)
+            select = cursor
+            return
+        }
+
+        if ctrl {
+            space_skip := (1 * int(select + 1 < len(buffer)))
+            space := strings.index_byte(string(buffer[select + space_skip:]), ' ')
+            select = space + select + space_skip if space != -1 else len(buffer)
+
+            if !shift do cursor = select
+            return
+        }
+        
+        select += utf8.rune_size(utf8.rune_at(string(buffer[:]), select))
+        select = min(select, len(buffer))
+        if !shift do cursor = select
+        
+
+    case is(.UP), is(.DOWN): // TODO: traverse history
+        input.cursor_visible = true
+        input.cursor_timeout = opts.input.cursor_blink_rate
+    
+    case ctrl && is(.A):
+        select = 0
+        cursor = len(buffer)
+        if shift do select = cursor
+        
+
+    case ctrl && is(.C):
+        input.cursor_visible = true
+        input.cursor_timeout = opts.input.cursor_blink_rate
+
+        lo := min(select, cursor)
+        hi := max(select, cursor) + utf8.rune_size(utf8.rune_at(string(buffer[:]), max(select, cursor)))
+
+        lo = max(lo, 0); hi = min(hi, len(buffer))
+        write_clipboard(string(buffer[lo:hi]))
+    
+    case ctrl && is(.V):
+        input.cursor_visible = true
+        input.cursor_timeout = opts.input.cursor_blink_rate
+
+        if select != cursor {
+            delete_range(input, min(select, cursor), max(select, cursor), text_opts)
+            cursor = min(cursor, select)
+            select = cursor
+        }
+        
+        contents := rl.GetClipboardText()
+        inject_at_elem_string(buffer, cursor, string(contents))
+        inject_positions(input, cursor, string(contents), text_opts)
+        cursor += len(contents)
+        select = cursor
+
+        input.events += { .CHANGE }
+
+    // ...
+
+    }// }}}
+
+    // deletes text & rune_positions in lo..<hi
+    // recalculates the rune_positions after the deleted segment
+    delete_range :: proc(input: ^TextInput, lo: int, hi: int, text_opts: TextOptions) {
+        remove_range(&input.rune_positions, lo + 1, len(input.rune_positions))
+        inject_positions(input, lo, string(input.text[hi - 1:]), text_opts)
+        remove_range(&input.text, lo, hi)
+    }
+
+    inject_positions :: proc(input: ^TextInput, index: int, str: string, text_opts: TextOptions) {
+        positions := &input.rune_positions
+        prev_len  := len(str)
+        index := index + 1
+
+        runtime.resize(positions, len(input.text) + 1)
+        for i in 0..<prev_len {
+            positions[index + i] = positions[i]
+        }
+
+        from := positions[index - 1]
+
+        for r, i in str {
+            width := MeasureRune(r, {}, text_opts).x
+            for j in 0..<utf8.rune_size(r) {
+                positions[index + i + j] = from + width
+            }
+            from += width
+        }
+
+    }
+
+    write_clipboard :: proc(str: string) {
+        // Unfortunately, some linux clipboards use the 
+        // program's memory to store the clipboard contents
+        @static cstr: cstring = ""
+        if cstr != "" do delete_cstring(cstr)
+        cstr = strings.clone_to_cstring(str)
+        rl.SetClipboardText(cstr)
+        
+    }
+
+    last_rune_size :: proc(bytes: [] byte) -> int {
+        _, n := utf8.decode_last_rune_in_bytes(bytes)
+        return n
+    }
 }

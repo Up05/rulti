@@ -1,7 +1,8 @@
 # Raylib addons
 
 My collection of addons to Raylib written in odin-lang.
-Each file should be independent (for you to just delete). 
+Files are mostly independent and may be deleted, HOWEVER
+2 functions in the UI module depend on the Text module.
 
 # Text module
 
@@ -88,10 +89,13 @@ DrawCapsule2D :: proc(p1, p2: rl.Vector2, radius: f32, segments : int, color: rl
 
 ## UI module
 
+**DrawTextInput & UpdateTextInput depends on the Text module!**
+
 Additions:
 1. Scrollbar
 2. The Gruvbox colorscheme values (I just want them somewhere, okay!?)
 3. Inset and outset borders
+4. Text input (inspired by Firefox's URL bar)
 
 ## Functions
 
@@ -132,6 +136,16 @@ DrawBorderInset :: proc(pos, size: rl.Vector2, darker, brighter: rl.Color, thick
 // 🬞🬭🬭 Draws a two color border, where top-left sides are brighter
 // 🮉▁🭿 this makes the rectangle look like it pops out of ...
 DrawBorderOutset :: proc(pos, size: rl.Vector2, darker, brighter: rl.Color, thicker := false)
+
+// Just call this like a RectangleV... And (if using) give it your Camera2D
+// Input is "stateful", so be careful not to recreate it each frame
+// Scissoring is done automatically in this case
+DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
+                      opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS)
+
+// Called automatically, but can still be called by user when the input is actually hidden
+UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
+                        opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS)
 ```
 
 ## Public variables
@@ -177,6 +191,20 @@ Scroll :: struct {
     max : rl.Vector2, // should be set to size of the entire scrollable thing
     vel : rl.Vector2, // private-ish
     id  : u64,        // private-ish
+}
+
+TextInput :: struct {
+    text   : [dynamic] u8,  // for a custom allocator: make() the array yourself
+    cursor : int,           // min(cursor, select) is the selection start
+    select : int,           // max(cursor, select) is the right hand side of selection
+    active : bool,          // just is the input active, could be set by user
+    events : bit_set [TextInputEvent], // options are: { SUBMIT, ESCAPE, CHANGE }
+    
+    placeholder : string, // the text shown when text box is empty
+
+    rune_positions : [dynamic] f32, // private, (pixel offsets by bytes + ..[0] = 0 after UpdateTextInput() )
+    cursor_timeout : int,   // private, cursor timeout in frames
+    cursor_visible : bool,  // private, cusror is the (custom) IBEAM thingy
 }
 ``` 
 

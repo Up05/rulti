@@ -25,7 +25,7 @@ main :: proc() {
     rl.SetConfigFlags({ .WINDOW_RESIZABLE, .MSAA_4X_HINT })
 
     rl.InitWindow(1280, 720, "UML Generatorius")
-    rl.SetTargetFPS(60)
+    rl.SetTargetFPS(30)
 
     font_data, _ := base64.decode(THE_FONT) 
     font := LoadFontFromMemory(font_data, 24, false)
@@ -45,12 +45,17 @@ main :: proc() {
 
     scroll: Scroll = { max = new_size }
 
+    ti: TextInput
     for !rl.WindowShouldClose() {
         rl.BeginDrawing()
         defer rl.EndDrawing()
-        rl.ClearBackground(rl.WHITE)
+        rl.ClearBackground({ 225, 225, 255, 255 })
 
         rl.BeginMode2D(main_camera);
+
+        DEFAULT_TEXT_OPTIONS.selectable = true
+        ti.placeholder = "a text input"
+        DrawTextInput(&ti, { 20, 700 }, { 500, 26 })
 
         rl.DrawRectangleLinesEx({ 20, 20,     600, 650 }, 2, rl.BLACK)
 
@@ -82,6 +87,8 @@ main :: proc() {
 
         DEFAULT_TEXT_OPTIONS.camera = nil
         DrawTextBasic(fmt.aprintf("Frame time: %.6f", rl.GetFrameTime()), { 20, f32(rl.GetScreenHeight()) - DEFAULT_TEXT_OPTIONS.size })
+
+        free_all(context.temp_allocator)
 
     }
 
