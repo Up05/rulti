@@ -183,6 +183,13 @@ UIOptions :: struct {
         border_bright  : rl.Color, // thumb has an outset border
         speed_maintain : f32,      // percent of velocity to be leftover each frame
         speed          : f32,      // amount of velocity added (kind of, in pixels)
+    },
+    input : struct {
+        cursor_blink_rate : int,      // rate of visible <-> invisible in frames
+        border_dark       : rl.Color, // top-left border of the text input
+        border_bright     : rl.Color, // bottom-right border
+        selection_bg      : rl.Color, // selected text background
+        placeholder_fg    : rl.Color, // see TextInput.placeholder
     }
 }
 

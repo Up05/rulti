@@ -21,6 +21,9 @@ import "base:runtime"
     3.  DrawBorderInset   procedure  Draws an "embedded" border
         DrawBorderOutset  procedure  Draws a  "popped" border
 
+    4. DrawTextInput      procedure  Draws a browser-like inline text box
+       UpdateTextInput    procedure  Handles keyboard inputs for an ACTIVE text box
+
     And by the way, roll the layout yourself or whatever...
 */
 
@@ -101,7 +104,6 @@ UIOptions :: struct {
         border_bright     : rl.Color,
         selection_bg      : rl.Color,
         placeholder_fg    : rl.Color,
-
     }
 }
 
