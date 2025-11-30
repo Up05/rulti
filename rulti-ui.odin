@@ -29,8 +29,8 @@ import "base:runtime"
 
 // Convert: 0xRRGGBBAA to raylib.Color
 // do not forget to speficy alpha! zero is zero.
-ColorFromHex :: proc(hex: u32) -> rl.Color {
-    assert(hex >= 0 && hex <= 0xFFFFFFFF)
+ColorFromHex :: proc "contextless" (hex: u32) -> rl.Color {
+    // assert(hex >= 0 && hex <= 0xFFFFFFFF)
     r : u8 = u8( (hex & 0xFF000000) >> 24 )
     g : u8 = u8( (hex & 0x00FF0000) >> 16 )
     b : u8 = u8( (hex & 0x0000FF00) >>  8 )
@@ -357,6 +357,14 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         text_opts := text_opts
         text_opts.color = opts.input.placeholder_fg
         DrawTextBasic(input.placeholder, pos, text_opts)
+    }
+
+    if  rl.IsMouseButtonDown(.LEFT) && 
+        rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, size.x, size.y }) &&
+        !selection_in_progress && !IsAnyScrollbarDragged() {
+        input.active = true
+    } else if rl.IsMouseButtonDown(.LEFT) {
+        input.active = true
     }
 
     if input.active {
