@@ -608,12 +608,14 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     // deletes text & rune_positions in lo..<hi
     // recalculates the rune_positions after the deleted segment
     delete_range :: proc(input: ^TextInput, lo: int, hi: int, text_opts: TextOptions) {
+        if len(input.text) == 0 { return }
         remove_range(&input.rune_positions, lo + 1, len(input.rune_positions))
         inject_positions(input, lo, string(input.text[hi - 1:]), text_opts)
         remove_range(&input.text, lo, hi)
     }
 
     inject_positions :: proc(input: ^TextInput, index: int, str: string, text_opts: TextOptions) {
+        if len(str) == 0 { return }
         positions := &input.rune_positions
         prev_len  := len(str)
         index := index + 1
