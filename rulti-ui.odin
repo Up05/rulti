@@ -364,7 +364,7 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         !selection_in_progress && !IsAnyScrollbarDragged() {
         input.active = true
     } else if rl.IsMouseButtonDown(.LEFT) {
-        input.active = true
+        input.active = false
     }
 
     if input.active {
@@ -377,8 +377,9 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
 
     // When text box is overflowing
     cursor_pixel_offset := input.rune_positions[max(input.cursor, input.select)] if len(input.text) > 0 else 0
-    if cursor_pixel_offset > size.x {
-        rl.BeginScissorMode(i32(pos.x), i32(pos.y), i32(size.x), i32(size.y))
+    should_clip := len(input.rune_positions) > 0 && input.rune_positions[len(input.rune_positions)-1] > size.x 
+    if should_clip {
+        rl.BeginScissorMode(i32(pos.x)-1, i32(pos.y), i32(size.x)+2, i32(size.y))
     }
 
     offset: rl.Vector2 = { max(cursor_pixel_offset - size.x, 0), 0 }
@@ -411,23 +412,22 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     if input.active && !selecting_range {
         input.cursor_timeout -= 1
         if input.cursor_timeout < 0 {
-            input.cursor_timeout  = opts.input.cursor_blink_rate
+            input.cursor_timeout = opts.input.cursor_blink_rate
             input.cursor_visible = !input.cursor_visible
         }
         if input.cursor_visible {
             x := pos.x + input.rune_positions[min(input.cursor, input.select)]
-            rl.DrawLineV({ x, pos.y } - offset, { x, pos.y + text_size.y }, text_opts.color)
+            rl.DrawLineV({ x, pos.y } - offset, { x, pos.y + text_size.y } - offset, text_opts.color)
         }
     }
 
-    if cursor_pixel_offset > size.x {
-        rl.EndScissorMode()
-    }
+    if should_clip { rl.EndScissorMode() }
 }
 
 // Called automatically, but can still be called by user when the input is actually hidden
 UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
                         opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS) {
+    input.events = {}
 
     // Initialization
     stride := &input.rune_positions
@@ -451,6 +451,7 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         cursor += n
         select += n
 
+        input.cursor_timeout = opts.input.cursor_blink_rate
         input.events += { .CHANGE }
         return
     }
@@ -599,6 +600,10 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     // ...
 
     }// }}}
+
+    if input.events != { } {
+        input.cursor_timeout = opts.input.cursor_blink_rate
+    }
 
     // deletes text & rune_positions in lo..<hi
     // recalculates the rune_positions after the deleted segment
