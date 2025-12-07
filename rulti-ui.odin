@@ -359,11 +359,11 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         DrawTextBasic(input.placeholder, pos, text_opts)
     }
 
-    if  rl.IsMouseButtonDown(.LEFT) && 
+    if  rl.IsMouseButtonPressed(.LEFT) && 
         rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, size.x, size.y }) &&
-        !selection_in_progress && !IsAnyScrollbarDragged() {
+        !IsAnyScrollbarDragged() {
         input.active = true
-    } else if rl.IsMouseButtonDown(.LEFT) {
+    } else if rl.IsMouseButtonPressed(.LEFT) {
         input.active = false
     }
 
@@ -393,7 +393,6 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     }
   
     text_opts := text_opts
-    text_opts.selectable = true
     text_size := DrawTextBasic(string(input.text[:]), pos - offset, text_opts)
 
     if transmute(u64) (pos - offset) == sel_id {
@@ -652,3 +651,20 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         return n
     }
 }
+
+RefreshTextInput :: proc(input: ^TextInput, text_opts := DEFAULT_TEXT_OPTIONS) {
+    positions := &input.rune_positions
+
+    runtime.resize(positions, len(input.text) + 1)
+    positions[0] = 0
+
+    from: f32
+    for r, i in string(input.text[:]) {
+        width := MeasureRune(r, {}, text_opts).x
+        for j in 0..<utf8.rune_size(r) {
+            positions[i + j + 1] = from + width
+        }
+        from += width
+    }
+}
+
