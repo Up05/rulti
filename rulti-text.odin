@@ -92,6 +92,28 @@ MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_T
     return
 }
 
+// Secret little function I needed in another project and decided to also add here ;)
+MeasureTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, 
+                           opts := DEFAULT_TEXT_OPTIONS) -> (size: rl.Vector2) {
+    if len(text) == 0 do return
+    if box_size == {} do return
+    lines := SplitTextIntoLines(text, pos, box_size, opts)
+
+    winner_len: int
+    #no_bounds_check for line in lines {
+
+        are_there_tabs: bool
+        for b in (transmute([] byte) line) {   if b == '\t' { are_there_tabs = true; break }   }
+        if !are_there_tabs && len(line) < winner_len do continue
+        
+        line_size := MeasureTextLine(line, pos.x, opts)
+        size.x = max(size.x, line_size.x)
+        winner_len = max(winner_len, len(line))
+    }
+    size.y = f32(len(lines)) * ( opts.size + opts.line_spacing )
+    return
+}
+
 // Draws a single line text. No centering, selection or '\n' handling.
 DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec) {
     opts := opts
