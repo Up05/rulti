@@ -272,8 +272,8 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
         selection_in_progress = false
     }
 
-    cam: rl.Camera2D = camera^ if camera != nil else { zoom = 1 }
-    mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
+    mouse := rl.GetMousePosition()
+    mouse  = rl.GetScreenToWorld2D(mouse, opts.camera^) if camera != nil else mouse
 
     pos := pos
     rune_index: int
@@ -366,11 +366,12 @@ CacheTextWrapped :: proc( texture: ^rl.RenderTexture2D, text: string, pos_x_for_
     return
 }
 
+import "core:fmt"
 
 // Generate the texture for this via CacheTextWrapped
 // Pass the same text and the same options as to CacheTextWrapped
 DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
-                        original_text := "", original_opts := DEFAULT_TEXT_OPTIONS ) {
+                        original_text := "", original_opts := DEFAULT_TEXT_OPTIONS) {
     using original_opts
 
     tex := texture.texture
@@ -380,9 +381,9 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
     // Basically just copied from DrawTextWrapped. There for selection
     is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
     is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
-
-    cam: rl.Camera2D = camera^ if camera != nil else { zoom = 1 }
-    mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
+    
+    mouse := rl.GetMousePosition()
+    mouse  = rl.GetScreenToWorld2D(mouse, original_opts.camera^) if camera != nil else mouse
     
     // Selecting text is slow af and it just does not matter
     if is_mouse_start || is_mouse_ongoing || sel_id != 0 {

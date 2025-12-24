@@ -12,6 +12,11 @@ Additions:
 3. A jumping-off point for mouse selection.
 4. Compile time loading of fonts + simpler loading of SDF fonts.
 
+Common problems:
+1. Mouse behaving weirdly, because `opts.camera != &user_camera`
+2. Drawing black text on black background
+3. `box_size` being bigger than leftover screen, so the text is centered offscreen
+
 ## Functions
 
 ```odin

@@ -5,18 +5,6 @@ import "core:encoding/base64"
 import "core:math"
 import "core:fmt"
 
-LOREM :: `
-Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
-
-Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
-
-Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
-
-Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
-
-Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis. Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
-`
-
 main_camera: rl.Camera2D = { zoom = 1 }
 
 main :: proc() {
@@ -57,7 +45,7 @@ main :: proc() {
         ti.placeholder = "a text input"
         DrawTextInput(&ti, { 20, 700 }, { 500, 26 })
 
-        rl.DrawRectangleLinesEx({ 20, 20,     600, 650 }, 2, rl.BLACK)
+        rl.DrawRectangleLinesEx({ 20, 20, 600, 650 }, 2, rl.BLACK)
 
         // big, scrollable, block of text
         DrawTextCached(big_text, { 20, 20 } - scroll.pos, LOREM)
@@ -87,6 +75,7 @@ main :: proc() {
 
         DEFAULT_TEXT_OPTIONS.camera = nil
         DrawTextBasic(fmt.aprintf("Frame time: %.6f", rl.GetFrameTime()), { 20, f32(rl.GetScreenHeight()) - DEFAULT_TEXT_OPTIONS.size })
+        DEFAULT_TEXT_OPTIONS.camera = &main_camera // !important or else you will get a very annoying bug!
 
         free_all(context.temp_allocator)
 
@@ -97,6 +86,50 @@ main :: proc() {
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+LOREM :: `
+Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
+
+Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
+
+Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
+
+Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
+
+Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis. Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
+`
 
 /**
 

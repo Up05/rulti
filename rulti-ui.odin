@@ -29,8 +29,8 @@ import "base:runtime"
 
 // Convert: 0xRRGGBBAA to raylib.Color
 // do not forget to speficy alpha! zero is zero.
-ColorFromHex :: proc(hex: u32) -> rl.Color {
-    assert(hex >= 0 && hex <= 0xFFFFFFFF)
+ColorFromHex :: proc "contextless" (hex: u32) -> rl.Color {
+    // assert(hex >= 0 && hex <= 0xFFFFFFFF)
     r : u8 = u8( (hex & 0xFF000000) >> 24 )
     g : u8 = u8( (hex & 0x00FF0000) >> 16 )
     b : u8 = u8( (hex & 0x0000FF00) >>  8 )
@@ -359,6 +359,14 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         DrawTextBasic(input.placeholder, pos, text_opts)
     }
 
+    if  rl.IsMouseButtonPressed(.LEFT) && 
+        rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, size.x, size.y }) &&
+        !IsAnyScrollbarDragged() {
+        input.active = true
+    } else if rl.IsMouseButtonPressed(.LEFT) {
+        input.active = false
+    }
+
     if input.active {
         // Background
         rl.DrawRectangleV(pos, size, { 0, 0, 0, 25 }) // todo opts.input.active_tint
@@ -369,8 +377,9 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
 
     // When text box is overflowing
     cursor_pixel_offset := input.rune_positions[max(input.cursor, input.select)] if len(input.text) > 0 else 0
-    if cursor_pixel_offset > size.x {
-        rl.BeginScissorMode(i32(pos.x), i32(pos.y), i32(size.x), i32(size.y))
+    should_clip := len(input.rune_positions) > 0 && input.rune_positions[len(input.rune_positions)-1] > size.x 
+    if should_clip {
+        rl.BeginScissorMode(i32(pos.x)-1, i32(pos.y), i32(size.x)+2, i32(size.y))
     }
 
     offset: rl.Vector2 = { max(cursor_pixel_offset - size.x, 0), 0 }
@@ -384,7 +393,6 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     }
   
     text_opts := text_opts
-    text_opts.selectable = true
     text_size := DrawTextBasic(string(input.text[:]), pos - offset, text_opts)
 
     if transmute(u64) (pos - offset) == sel_id {
@@ -403,23 +411,22 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     if input.active && !selecting_range {
         input.cursor_timeout -= 1
         if input.cursor_timeout < 0 {
-            input.cursor_timeout  = opts.input.cursor_blink_rate
+            input.cursor_timeout = opts.input.cursor_blink_rate
             input.cursor_visible = !input.cursor_visible
         }
         if input.cursor_visible {
             x := pos.x + input.rune_positions[min(input.cursor, input.select)]
-            rl.DrawLineV({ x, pos.y } - offset, { x, pos.y + text_size.y }, text_opts.color)
+            rl.DrawLineV({ x, pos.y } - offset, { x, pos.y + text_size.y } - offset, text_opts.color)
         }
     }
 
-    if cursor_pixel_offset > size.x {
-        rl.EndScissorMode()
-    }
+    if should_clip { rl.EndScissorMode() }
 }
 
 // Called automatically, but can still be called by user when the input is actually hidden
 UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
                         opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS) {
+    input.events = {}
 
     // Initialization
     stride := &input.rune_positions
@@ -443,6 +450,7 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         cursor += n
         select += n
 
+        input.cursor_timeout = opts.input.cursor_blink_rate
         input.events += { .CHANGE }
         return
     }
@@ -592,15 +600,21 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
 
     }// }}}
 
+    if input.events != { } {
+        input.cursor_timeout = opts.input.cursor_blink_rate
+    }
+
     // deletes text & rune_positions in lo..<hi
     // recalculates the rune_positions after the deleted segment
     delete_range :: proc(input: ^TextInput, lo: int, hi: int, text_opts: TextOptions) {
+        if len(input.text) == 0 { return }
         remove_range(&input.rune_positions, lo + 1, len(input.rune_positions))
         inject_positions(input, lo, string(input.text[hi - 1:]), text_opts)
         remove_range(&input.text, lo, hi)
     }
 
     inject_positions :: proc(input: ^TextInput, index: int, str: string, text_opts: TextOptions) {
+        if len(str) == 0 { return }
         positions := &input.rune_positions
         prev_len  := len(str)
         index := index + 1
@@ -637,3 +651,20 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         return n
     }
 }
+
+RefreshTextInput :: proc(input: ^TextInput, text_opts := DEFAULT_TEXT_OPTIONS) {
+    positions := &input.rune_positions
+
+    runtime.resize(positions, len(input.text) + 1)
+    positions[0] = 0
+
+    from: f32
+    for r, i in string(input.text[:]) {
+        width := MeasureRune(r, {}, text_opts).x
+        for j in 0..<utf8.rune_size(r) {
+            positions[i + j + 1] = from + width
+        }
+        from += width
+    }
+}
+
