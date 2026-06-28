@@ -1,26 +1,23 @@
+#+feature using-stmt
 package rulti
 
 import rl "vendor:raylib"
-
-vec :: rl.Vector2
+import "core:fmt"
 
 TextOptions :: struct {
-    font         : rl.Font,
-    size         : f32,
-    spacing      : f32,
-    line_spacing : f32,         
-    tab_width    : f32,         // tab shift character max width
-    force_left   : f32,         // somewhat internal, forces everything left, except tabstops
+    fallback_fonts : [dynamic; #config(RULTI_MAX_FALLBACK_FONTS, 8)] rl.Font,
+    font           : rl.Font,
+    size           : f32,
+    spacing        : f32,
+    line_spacing   : f32,         
 
-    center_x     : bool,        // whether to center horizontally
-    center_y     : bool,        // whether to center  verticallly
-    selectable   : bool,        // whether text is selectable with the mouse
+    center_x       : bool,         // whether to center horizontally
+    center_y       : bool,         // whether to center  verticallly
+    selectable     : bool,         // whether text is selectable with the mouse
 
-    color        : rl.Color,    // the text character color
-    background   : rl.Color,    // tightly wrapped
-    highlight    : rl.Color,    // text selection color
-
-    camera       : ^rl.Camera2D,// set this if selectable = true and text is drawn after `BeginMode2D(...)`...
+    color          : rl.Color,     // the text character color
+    background     : rl.Color,     // tightly wrapped
+    highlight      : rl.Color,     // text selection color
 }
 
 // May be changed
@@ -29,13 +26,11 @@ DEFAULT_TEXT_OPTIONS : TextOptions = {
     size         = 24,
     spacing      = 1,
     line_spacing = 2,
-    tab_width    = 24*4,
-    center_x     = true,
-    center_y     = true,
+    center_x     = false,
+    center_y     = false,
     color        = rl.BLACK,
     background   = {},
     highlight    = { 180, 215, 255, 255 },
-    camera       = nil,
 }
 
 // Currently selected text
@@ -48,112 +43,114 @@ selection_in_progress: bool
 @(private) sel_end   : int // btw, sel_end can be less than sel_start 
 @(private) sel_id    : u64
 
+GetFontWithRune :: proc(r: rune, s: ^State) -> (font: rl.Font, ok: bool) {
+    opts := s.text_options
+    glyph := rl.GetGlyphIndex(opts.font, r)
+    if opts.font.glyphs[glyph].image.data != nil {
+        return opts.font, true
+    }
+
+    for font in opts.fallback_fonts[:] {
+        glyph := rl.GetGlyphIndex(font, r)
+        if font.glyphs[glyph].image.data != nil {
+            return font, true
+        }
+    }
+
+    return {}, false
+}
+
+
 // Returns the size of a rune accounted for TextOptions.
-MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS) -> (advance: rl.Vector2) {
-    // Extra sh*t
-    opts := opts
-    using opts
-    if font.texture.id == 0 do font = rl.GetFontDefault()
-    if r < ' ' && r != '\t' do return
-    scaling := size / f32(font.baseSize)
+// '\n' and other non-printable ascii chars are ignored.
+MeasureRune :: proc(r: rune, s: ^State) -> (advance: rl.Vector2) {
+    opts := s.text_options
+    if r < ' ' do return
+
+    font, can_draw := GetFontWithRune(r, s)
+    if !can_draw { return { opts.size * (2.0/3) + opts.spacing, opts.size + opts.line_spacing } }
+
+    scaling := opts.size / f32(font.baseSize)
     
     // Advance
     glyph := rl.GetGlyphIndex(font, r)
     advance1 := f32(font.glyphs[glyph].advanceX)
-    advance.x += (advance1 if advance1 != 0 else font.recs[glyph].width) * scaling + spacing
-    if r == '\t' {
-        advance.x += tab_width - f32(i32(pos.x + advance.x)%i32(tab_width))
-    }
-    advance.y = size + line_spacing
+    advance.x += (advance1 if advance1 != 0 else font.recs[glyph].width) * scaling + opts.spacing
+    advance.y = opts.size + opts.line_spacing
+
     return
 }
 
-// don't worry about x_pos_for_tab too much, especially for centered text
-// because I just do not believe that a text that is centered should ever contain tabs. 
-MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec) {
-    using opts
-
-    assert(font.texture.id != 0, "MeasureText was given a bad font")
-    if len(text) == 0 do return 
-    
-    scaling := size / f32(font.baseSize)
-    
-    for r, i in text {
-        if r < ' ' && r != '\t' do continue
-        glyph := rl.GetGlyphIndex(font, r)
-        advance := f32(font.glyphs[glyph].advanceX)
-        text_size.x += (advance if advance != 0 else font.recs[glyph].width) * scaling + spacing
-        if r == '\t' {
-            text_size.x += tab_width - f32(i32(x_pos_for_tab + text_size.x)%i32(tab_width))
-        }
-    }
-
-    text_size.y = size + line_spacing
+// y component is a line + it's advance even if given an empty string
+// x component may be zero
+// '\n' are ignored.
+MeasureTextLine :: proc(text: string, s: ^State) -> (text_size: rl.Vector2) {
+    opts := s.text_options
+    for r, i in text { text_size += MeasureRune(r, s) }
+    text_size.y = opts.size + opts.line_spacing
     return
 }
 
-// Secret little function I needed in another project and decided to also add here ;)
-MeasureTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, 
-                           opts := DEFAULT_TEXT_OPTIONS) -> (size: rl.Vector2) {
-    if len(text) == 0 do return
+// y component is a line + it's advance even if given an empty string
+// x component may be zero
+MeasureTextWrapped :: proc(text: string, box_size: rl.Vector2, s: ^State) -> (size: rl.Vector2) {
+    opts := s.text_options
     if box_size == {} do return
-    lines := SplitTextIntoLines(text, pos, box_size, opts)
+    lines := SplitTextIntoLines(text, box_size, s)
 
     winner_len: int
     #no_bounds_check for line in lines {
-
-        are_there_tabs: bool
-        for b in (transmute([] byte) line) {   if b == '\t' { are_there_tabs = true; break }   }
-        if !are_there_tabs && len(line) < winner_len do continue
-        
-        line_size := MeasureTextLine(line, pos.x, opts)
-        size.x = max(size.x, line_size.x)
+        line_size := MeasureTextLine(line, s)
+        size.x     = max(size.x, line_size.x)
         winner_len = max(winner_len, len(line))
     }
     size.y = f32(len(lines)) * ( opts.size + opts.line_spacing )
     return
 }
 
+DrawRune :: proc(r: rune, pos: rl.Vector2, s: ^State) {
+    opts := s.text_options
+
+    font, can_draw := GetFontWithRune(r, s)
+    if !can_draw {
+        rl.DrawRectangleLinesEx({ pos.x, pos.y, opts.size * (2.0/3), opts.size }, 1, opts.color)
+        return
+    }
+
+    rl.DrawTextCodepoint(font, r, pos, opts.size, opts.color)
+}
+
+
 // Draws a single line text. No centering, selection or '\n' handling.
-DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec) {
-    opts := opts
-    using opts
-    if font.texture.id == 0 do font = rl.GetFontDefault()
+DrawTextBasic :: proc(text: string, pos: rl.Vector2, s: ^State, id: u64 = 0) -> (text_size: rl.Vector2) {
+    opts := s.text_options
         
     // Selection
     is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
     is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
 
-    id := transmute(u64) pos
+    id := id if id != 0 || !opts.selectable else NextId(s)
 
     if sel_id == id && is_mouse_start {
         sel_id = 0
         sel_start, sel_end = 0, 0
         selection_in_progress = false
     }
-    cam: rl.Camera2D = camera^ if camera != nil else { zoom = 1 }
-    mouse := rl.GetScreenToWorld2D(rl.GetMousePosition(), cam)
-
-    scaling := size / f32(font.baseSize)
-    offset: vec
+    
+    offset: rl.Vector2
     for r, i in text {
-        if r < ' ' && r != '\t' do continue
+        if r < ' ' do continue
 
-        rl.DrawRectangleV(pos + offset, MeasureRune(r, pos + offset), background)
-        rl.DrawTextCodepoint(font, r, pos + offset, size, color)
+        rl.DrawRectangleV(pos + offset, MeasureRune(r, s), opts.background)
+        DrawRune(r, pos + offset, s)
                 
-        glyph := rl.GetGlyphIndex(font, r)
-        advance1 := f32(font.glyphs[glyph].advanceX)
-        advance  := (advance1 if advance1 != 0 else font.recs[glyph].width) * scaling + spacing
+        advance  := MeasureRune(r, s).x
         offset.x += advance
-        if r == '\t' {
-            offset.x += tab_width - f32(i32(pos.x + offset.x)%i32(tab_width))
-        }
 
         //  Checking for mouse highlighting 
         ax := pos.x + offset.x - advance
         bx := advance
-        if selectable && rl.CheckCollisionPointRec(mouse, { ax, pos.y, bx, opts.size }) {
+        if opts.selectable && rl.CheckCollisionPointRec(s.mouse, { ax, pos.y, bx, opts.size }) {
             
             if is_mouse_start {
                 sel_id = id
@@ -168,20 +165,22 @@ DrawTextBasic :: proc(text: string, pos: rl.Vector2, opts := DEFAULT_TEXT_OPTION
         }
     }
     
-    if selectable {
-        pmouse := mouse - rl.GetMouseDelta()
-        a := rl.CheckCollisionPointRec(pmouse, { pos.x, pos.y, offset.x, size + line_spacing })
-        b := rl.CheckCollisionPointRec(mouse,  { pos.x, pos.y, offset.x, size + line_spacing })
+    if opts.selectable { // && state.active == id
+        pmouse := s.mouse - rl.GetMouseDelta()
+        a := rl.CheckCollisionPointRec(pmouse,  { pos.x, pos.y, offset.x, opts.size + opts.line_spacing })
+        b := rl.CheckCollisionPointRec(s.mouse, { pos.x, pos.y, offset.x, opts.size + opts.line_spacing })
         if !a && b { rl.SetMouseCursor(.IBEAM) }
         if a && !b { rl.SetMouseCursor(.DEFAULT) }
     }
 
-    return { offset.x, size + line_spacing }
+    if opts.selectable { DebugDrawInfo(pos, { offset.x, opts.size + opts.line_spacing }, id, s) }
+
+    return { offset.x, opts.size + opts.line_spacing }
 }
 
 // Less useful for user. Wraps text into new lines.
-SplitTextIntoLines :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, 
-                           opts := DEFAULT_TEXT_OPTIONS) -> (lines: [dynamic] string) {
+SplitTextIntoLines :: proc(text: string, box_size: rl.Vector2, s: ^State) -> (lines: [dynamic] string) {
+    opts := s.text_options
     text := text
     lines = make([dynamic] string, context.allocator)
     cursor : int
@@ -190,7 +189,7 @@ SplitTextIntoLines :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
         cursor = find_space_from(text, cursor + 1)
         defer pcursor = cursor
         
-        chunk_size := MeasureTextLine(text[:cursor], pos.x, opts)
+        chunk_size := MeasureTextLine(text[:cursor], s)
 
         // Automatic text wrapping
         if chunk_size.x >= box_size.x {
@@ -199,7 +198,7 @@ SplitTextIntoLines :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
                 x: f32
                 p: int // previous i
                 for r, i in text[:cursor] {
-                    x += MeasureRune(r).x
+                    x += MeasureRune(r, s).x
                     if x >= box_size.x {
                         append(&lines, text[p:i])
                         p = i + 1
@@ -220,15 +219,12 @@ SplitTextIntoLines :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
 
         // New line characters
         if cursor < len(text) {
+            // TODO is this even necessary?
             if text[cursor] == '\r' { // Windows: \r\n
                 append(&lines, text[:cursor])
                 text = text[cursor + 1:]
                 pcursor = 0
                 cursor  = 0
-
-                // For ..<macOS 9 remove '+ 1' on line with 'text ='
-                // uncomment this line:  (and hope)
-                // if 1 < len(text) && text[1] == '\n' do text = text[1:] 
 
             } else if text[cursor] == '\n' { // Else: \n
                 append(&lines, text[:cursor])
@@ -247,16 +243,15 @@ SplitTextIntoLines :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
     return
 }
 
+
 // Slow, generates thousands of draw calls for long text, but is very dynamic.
 // Prefer caching, but don't get scared, it's probably fine.
-DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, 
-                        opts := DEFAULT_TEXT_OPTIONS) -> (new_size: vec) {
-    using opts
-    
+DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, s: ^State, id: u64 = 0) -> (new_size: rl.Vector2) {
+    opts := s.text_options
     original_text := text
     text  := text
 
-    lines := SplitTextIntoLines(text, pos, box_size, opts)
+    lines := SplitTextIntoLines(text, box_size, s)
     defer delete(lines)
 
     // --------------------- Drawing + selection --------------------- 
@@ -264,7 +259,7 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
     is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
     is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
 
-    id := transmute(u64) pos
+    id := id if id != 0 || !opts.selectable else NextId(s)
 
     if sel_id == id && is_mouse_start {
         sel_id = 0
@@ -272,33 +267,30 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
         selection_in_progress = false
     }
 
-    mouse := rl.GetMousePosition()
-    mouse  = rl.GetScreenToWorld2D(mouse, opts.camera^) if camera != nil else mouse
-
     pos := pos
     rune_index: int
     // Drawing lines 
     for line, line_index in lines {
         defer rune_index += len(line)
-        chunk_size := MeasureTextLine(line, pos.x, opts)
+        chunk_size := MeasureTextLine(line, s)
         
-        o: vec // offset
+        o: rl.Vector2 // offset
 
-        o.x = (box_size.x - chunk_size.x) / 2 if center_x else 0
-        o.y = (box_size.y - (size + line_spacing) * f32(len(lines))) / 2 + size/2 if center_y else 0
-        o.y += f32(line_index) * ( size + line_spacing )
+        o.x = (box_size.x - chunk_size.x) / 2 if opts.center_x else 0
+        o.y = (box_size.y - (opts.size + opts.line_spacing) * f32(len(lines))) / 2 + opts.size/2 if opts.center_y else 0
+        o.y += f32(line_index) * ( opts.size + opts.line_spacing )
 
         // Drawing individual characters 
         for r, i in line {
-            advance := MeasureRune(r, pos + o, opts)
+            advance := MeasureRune(r, s)
             if advance == {} do continue
 
             //  Checking for mouse highlighting    ( this is all slow :< )
             a := pos + o
             b := advance
-            if  selectable && 
-                rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, box_size.x, box_size.y }) &&
-                rl.CheckCollisionPointRec(mouse, { a.x, a.y, b.x, b.y }) {
+            if  opts.selectable && 
+                rl.CheckCollisionPointRec(s.mouse, { pos.x, pos.y, box_size.x, box_size.y }) &&
+                rl.CheckCollisionPointRec(s.mouse, { a.x, a.y, b.x, b.y }) {
 
                 if is_mouse_start {
                     sel_id = id
@@ -311,36 +303,35 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
                 }
             }
 
-            shift : vec = { -force_left, 0 }
-
             // Background
             if sel_id == id &&
                rune_index + i >= min(sel_start, sel_end) && 
                rune_index + i <= max(sel_start, sel_end) {
-                rl.DrawRectangleV(pos + o + shift, advance, highlight) 
+                rl.DrawRectangleV(pos + o, advance, opts.highlight) 
             } else {
-               rl.DrawRectangleV(pos + o + shift, advance, background) 
+               rl.DrawRectangleV(pos + o, advance, opts.background) 
             }
 
             if r == '\t' do continue
 
-            rl.DrawTextCodepoint(font, r, floor_vec(pos + o + shift), size, color)
+            DrawRune(r, floor_vec(pos + o), s)
             o.x += advance.x
             new_size.x = max(new_size.x, o.x)
         }
     }
 
-    new_size.y = f32(len(lines)) * ( size + line_spacing )
+    new_size.y = f32(len(lines)) * ( opts.size + opts.line_spacing )
 
-    if selectable {
-        pmouse := mouse - rl.GetMouseDelta()
+    if opts.selectable {
+        pmouse := s.mouse - rl.GetMouseDelta()
         rec := rl.Rectangle { pos.x, pos.y, min(box_size.x, new_size.x), min(box_size.y, new_size.y) }
-        a := rl.CheckCollisionPointRec(pmouse, rec)
-        b := rl.CheckCollisionPointRec(mouse,  rec)
+        a := rl.CheckCollisionPointRec(pmouse,  rec)
+        b := rl.CheckCollisionPointRec(s.mouse, rec)
         if !a && b { rl.SetMouseCursor(.IBEAM) }
         if a && !b { rl.SetMouseCursor(.DEFAULT) }
-    }
 
+        DebugDrawInfo(pos, box_size, id, s) 
+    }
 
     return
 }
@@ -349,8 +340,8 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2,
 //    to get text highlighting working. (Also don't forget to save the opts)
 // 2. Either call DrawTextCached()
 // 3. You may zero initialize the texture  (i.e. texture: rl.RenderTexture2D = {}).
-CacheTextWrapped :: proc( texture: ^rl.RenderTexture2D, text: string, pos_x_for_tab: f32, box_size: rl.Vector2, 
-                          clear_color := rl.BLANK, opts := DEFAULT_TEXT_OPTIONS) -> (new_size: vec) {
+CacheTextWrapped :: proc(texture: ^rl.RenderTexture2D, text: string, box_size: rl.Vector2, 
+                         clear_color := rl.BLANK, s: ^State) -> (new_size: rl.Vector2) {
 
     if !rl.IsRenderTextureValid(texture^) {
         texture^ = rl.LoadRenderTexture(cast(i32) box_size.x + 2, cast(i32) box_size.y)
@@ -358,37 +349,32 @@ CacheTextWrapped :: proc( texture: ^rl.RenderTexture2D, text: string, pos_x_for_
     
     rl.BeginTextureMode(texture^)
     rl.ClearBackground(rl.BLANK)  // Remove this line to not reset the RenderTexture2D here
-    opts := opts
-    opts.force_left = pos_x_for_tab
-    new_size = DrawTextWrapped(text, { pos_x_for_tab, 0 }, box_size, opts)
-
+    new_size = DrawTextWrapped(text, { }, box_size, s)
     rl.EndTextureMode()
+
     return
 }
 
-import "core:fmt"
-
 // Generate the texture for this via CacheTextWrapped
 // Pass the same text and the same options as to CacheTextWrapped
-DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
-                        original_text := "", original_opts := DEFAULT_TEXT_OPTIONS) {
-    using original_opts
+DrawTextCached :: proc(texture: rl.RenderTexture2D, pos: rl.Vector2, original_text := "", original_state : ^State = nil, id: u64 = 0) {
+    original_state := original_state if original_state != nil else &{ }
+    opts := original_state.text_options
+    s    := original_state
 
     tex := texture.texture
     text  := original_text
-    box_size : vec = { f32(tex.width), f32(tex.height) }
+    box_size : rl.Vector2 = { f32(tex.width), f32(tex.height) }
 
     // Basically just copied from DrawTextWrapped. There for selection
     is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
     is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
     
-    mouse := rl.GetMousePosition()
-    mouse  = rl.GetScreenToWorld2D(mouse, original_opts.camera^) if camera != nil else mouse
-    
+    // TODO REPLACE THIS ENTIRE THING WITH   rune_positions: [] rl.Vector2   and that's it!
     // Selecting text is slow af and it just does not matter
-    if is_mouse_start || is_mouse_ongoing || sel_id != 0 {
+    if opts.selectable && (is_mouse_start || is_mouse_ongoing || sel_id != 0) {
 
-        lines := SplitTextIntoLines(text, pos, box_size, original_opts)
+        lines := SplitTextIntoLines(text, box_size, s)
         defer delete(lines)
 
         id := transmute(u64) pos
@@ -403,25 +389,25 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
         rune_index: int
         for line, line_index in lines {
             defer rune_index += len(line)
-            chunk_size := MeasureTextLine(line, pos.x, original_opts)
+            chunk_size := MeasureTextLine(line, s)
 
-            o: vec // offset
+            o: rl.Vector2 // offset
 
-            o.x = (box_size.x - chunk_size.x) / 2 if center_x else 0
-            o.y = (box_size.y - (size + line_spacing) * f32(len(lines))) / 2 + size/2 if center_y else 0
-            o.y += f32(line_index) * ( size + line_spacing )
+            o.x = (box_size.x - chunk_size.x) / 2 if opts.center_x else 0
+            o.y = (box_size.y - (opts.size + opts.line_spacing) * f32(len(lines))) / 2 + opts.size/2 if opts.center_y else 0
+            o.y += f32(line_index) * ( opts.size + opts.line_spacing )
 
             // Individual characters
             for r, i in line {
-                advance := MeasureRune(r, pos + o, original_opts)
+                advance := MeasureRune(r, original_state)
                 if advance == {} do continue
 
                 //  Checking for mouse highlighting
                 a := pos + o
                 b := advance
-                if  selectable && 
-                    rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, box_size.x, box_size.y }) &&
-                    rl.CheckCollisionPointRec(mouse, { a.x, a.y, b.x, b.y }) {
+                if  opts.selectable && 
+                    rl.CheckCollisionPointRec(s.mouse, { pos.x, pos.y, box_size.x, box_size.y }) &&
+                    rl.CheckCollisionPointRec(s.mouse, { a.x, a.y, b.x, b.y }) {
 
                     if is_mouse_start {
                         sel_id = id
@@ -436,12 +422,10 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
                     }
                 }
 
-                shift : vec = { -force_left, 0 }
-
                 if sel_id == id &&
                    rune_index + i >= min(sel_start, sel_end) && 
                    rune_index + i <= max(sel_start, sel_end) {
-                    rl.DrawRectangleV(pos + o + shift, advance, highlight) 
+                    rl.DrawRectangleV(pos + o, advance, opts.highlight) 
                 }
 
                 o.x += advance.x
@@ -451,13 +435,15 @@ DrawTextCached :: proc( texture: rl.RenderTexture2D, pos: vec,
 
     rl.DrawTextureRec(tex, { 0, 0, f32(tex.width), - f32(tex.height) }, pos, rl.WHITE)
 
-    if selectable {
-        pmouse := mouse - rl.GetMouseDelta()
+    if opts.selectable {
+        pmouse := s.mouse - rl.GetMouseDelta()
         rec := rl.Rectangle { pos.x, pos.y, min(box_size.x, f32(tex.width)), min(box_size.y, f32(tex.height)) }
         a := rl.CheckCollisionPointRec(pmouse, rec)
-        b := rl.CheckCollisionPointRec(mouse,  rec)
+        b := rl.CheckCollisionPointRec(s.mouse,  rec)
         if !a && b { rl.SetMouseCursor(.IBEAM) }
         if a && !b { rl.SetMouseCursor(.DEFAULT) }
+
+        DebugDrawInfo(pos, box_size, id, original_state)
     }
 }
 
@@ -488,7 +474,7 @@ LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_co
 
 @(private="file")
 // Text looks better when it is drawn aligned to the nearest pixel
-floor_vec :: proc(pos: vec) -> vec {
+floor_vec :: proc(pos: rl.Vector2) -> rl.Vector2 {
     return { f32(i32(pos.x)), f32(i32(pos.y)) }
 }
 

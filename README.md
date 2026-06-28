@@ -44,7 +44,7 @@ LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_co
 MeasureRune :: proc(r: rune, pos: rl.Vector2 = {}, opts := DEFAULT_TEXT_OPTIONS) -> (advance: rl.Vector2)
 
 // Same deal, ignore x_pos_for_tab if text does not contain '\t'
-MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: vec)
+MeasureTextLine :: proc(text: string, x_pos_for_tab : f32 = 0, opts := DEFAULT_TEXT_OPTIONS) -> (text_size: rl.Vector2)
 ```
 
 ## Public Variables
@@ -64,7 +64,6 @@ TextOptions :: struct {
     spacing      : f32,
     line_spacing : f32,
     tab_width    : f32,          // tab shift character max width
-    force_left   : f32,          // somewhat internal, forces everything left, except tabstops
 
     center_x     : bool,         // whether to center horizontally
     center_y     : bool,         // whether to center  verticallly

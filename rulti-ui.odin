@@ -1,11 +1,11 @@
 package rulti
 
 import rl "vendor:raylib"
-import "core:math/rand"
 
 import "core:unicode/utf8"
 import "core:strings"
 import "base:runtime"
+import "core:fmt"
 
 /**
     This file contains addons to raylib 
@@ -86,8 +86,6 @@ gruvbox : [GruvboxPalette] rl.Color = {
 }
 
 UIOptions :: struct {
-    camera : ^rl.Camera2D,
-
     scroll : struct {
         width          : f32,
         track_bg       : rl.Color,
@@ -138,13 +136,13 @@ dragged_scrollbar_id: u64
 @private
 dragged_scrollbar_horizontal: bool
 
-@private
-TryMakeScrollbarActive :: proc(scroll: Scroll, track: rl.Rectangle, opts: UIOptions) -> bool {
-    scroll := scroll
-    mouse := rl.GetMousePosition()
-    mouse  = rl.GetScreenToWorld2D(mouse, opts.camera^) if opts.camera != nil else mouse
+// TODO LATER REMOVE
+TryMakeScrollbarActive :: proc(scroll: Scroll, track: rl.Rectangle, s: ^State) -> bool {
+    if s == nil { return false }
 
-    if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(mouse, track) {
+    scroll := scroll
+
+    if rl.IsMouseButtonPressed(.LEFT) && rl.CheckCollisionPointRec(s.mouse, track) {
         dragged_scrollbar_id = scroll.id
         return true
     } 
@@ -173,13 +171,13 @@ IsAnyScrollbarDragged :: proc() -> bool { return dragged_scrollbar_id != 0 }
 //            ├──────────────────────┴──┤ <- pos + size
 //            ╎  and goes off-screen    ╎                         
 //            └╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶╶┘ <- pos + max
-DrawScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts := DEFAULT_UI_OPTIONS) {
+DrawScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, s: ^State) {
     assert(scroll != nil)
 
-    base_opts := opts
-    opts      := opts.scroll
+    base_opts := s.ui_options
+    opts      := s.ui_options.scroll
 
-    UpdateScrollbar(scroll, pos, size, base_opts)
+    UpdateScrollbar(scroll, pos, size, s)
 
     draw_vertical   := scroll.max.y != 0 && scroll.max.y > size.y  
     draw_horizontal := scroll.max.x != 0 && scroll.max.x > size.x 
@@ -188,7 +186,7 @@ DrawScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts :
         track_pos  : rl.Vector2 = pos + { size.x - opts.width, 0 }
         track_size : rl.Vector2 = { opts.width, size.y - (opts.width if draw_horizontal else 0) }
 
-        if TryMakeScrollbarActive(scroll^, { track_pos.x, track_pos.y, track_size.x, track_size.y }, base_opts) { 
+        if TryMakeScrollbarActive(scroll^, { track_pos.x, track_pos.y, track_size.x, track_size.y }, s) { 
             dragged_scrollbar_horizontal = false // mild spaghetti
         }
 
@@ -203,13 +201,15 @@ DrawScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts :
         rl.DrawRectangleV(track_pos, track_size, opts.track_bg)
         rl.DrawRectangleV({ track_pos.x, thumb_offset }, { track_size.x, thumb_height }, opts.thumb_bg)
         DrawBorderInset(track_pos, track_size, rl.BLACK, rl.LIGHTGRAY - 32)
+
+        DebugDrawInfo(track_pos, track_size, scroll.id, s)
     }
 
     if draw_horizontal { 
         track_pos  : rl.Vector2 = pos + { 0, size.y - opts.width }
         track_size : rl.Vector2 = { size.x - (opts.width if draw_vertical else 0), opts.width }
 
-        if TryMakeScrollbarActive(scroll^, { track_pos.x, track_pos.y, track_size.x, track_size.y }, base_opts) { 
+        if TryMakeScrollbarActive(scroll^, { track_pos.x, track_pos.y, track_size.x, track_size.y }, s) { 
             dragged_scrollbar_horizontal = true
         }
 
@@ -224,11 +224,15 @@ DrawScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts :
         rl.DrawRectangleV(track_pos, track_size, opts.track_bg)
         rl.DrawRectangleV({ thumb_offset, track_pos.y }, { thumb_width, track_size.y }, opts.thumb_bg)
         DrawBorderInset(track_pos, track_size, opts.border_dark, opts.border_bright)
+
+        DebugDrawInfo(track_pos, track_size, scroll.id, s)
     }
 
     if draw_vertical && draw_horizontal {
         rl.DrawRectangleV(pos + size - opts.width, opts.width, opts.corner_bg)
     }
+
+
 
 }
 
@@ -236,16 +240,17 @@ DrawScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts :
 // You may call this manually (every frame), 
 // if you only want mouse/... scrolling
 // but for scrollbars themselves to be hidden
-UpdateScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts := DEFAULT_UI_OPTIONS) {
-    assert(scroll != nil)
-    if scroll.id == 0 { scroll.id = rand.uint64() }
+UpdateScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, s: ^State) {
+    if scroll == nil { return }
+    if s      == nil { return }
+
+    if scroll.id == 0 { scroll.id = NextStaticId(s) }
+
+    opts := s.ui_options
 
     if rl.IsMouseButtonUp(.LEFT) {
         dragged_scrollbar_id = 0
     }
-
-    mouse := rl.GetMousePosition()
-    mouse  = rl.GetScreenToWorld2D(mouse, opts.camera^) if opts.camera != nil else mouse
 
     if IsScrollbarDragged(scroll^, false) {
         
@@ -253,7 +258,7 @@ UpdateScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts
         track_size : rl.Vector2 = { opts.scroll.width, size.y }
 
         thumb_height := track_size.y*track_size.y * (1/scroll.max.y)
-        scroll.pos.y = (mouse.y - track_pos.y - thumb_height/2) / track_size.y / (1/scroll.max.y)
+        scroll.pos.y = (s.mouse.y - track_pos.y - thumb_height/2) / track_size.y / (1/scroll.max.y)
     
     } else if IsScrollbarDragged(scroll^, true) {
 
@@ -261,9 +266,9 @@ UpdateScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts
         track_size : rl.Vector2 = { size.x, opts.scroll.width }
 
         thumb_width := track_size.x*track_size.x * (1/scroll.max.x)
-        scroll.pos.x = (mouse.x - track_pos.x - thumb_width/2) / track_size.x / (1/scroll.max.x)
+        scroll.pos.x = (s.mouse.x - track_pos.x - thumb_width/2) / track_size.x / (1/scroll.max.x)
     
-    } else if rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, size.x, size.y }) {
+    } else if rl.CheckCollisionPointRec(s.mouse, { pos.x, pos.y, size.x, size.y }) {
         
         vel := -rl.GetMouseWheelMoveV()
         if rl.IsKeyDown(.LEFT_SHIFT) {
@@ -283,11 +288,7 @@ UpdateScrollbar :: proc(scroll: ^Scroll, pos: rl.Vector2, size: rl.Vector2, opts
     end := scroll.max * 0.95
     scroll.pos = { max(scroll.pos.x, 0),     max(scroll.pos.y, 0) }
     scroll.pos = { min(scroll.pos.x, end.x), min(scroll.pos.y, end.y) }
-
 }
-   
-   
-
 
 // 🭽▔▌ Draws a two color border, where bottom-right sides are brighter
 // 🬂🬂🬀 this makes the rectangle look like it is embedded into ...
@@ -343,24 +344,29 @@ TextInput :: struct {
     rune_positions : [dynamic] f32,  
     cursor_timeout : int,
     cursor_visible : bool,
+
+    id : u64,
 }
 
-DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
-                      opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS) {
+DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, s: ^State) {
+    if input == nil { return }
+    if s     == nil { return }
 
-    mouse := rl.GetMousePosition()
-    mouse  = rl.GetScreenToWorld2D(mouse, opts.camera^) if opts.camera != nil else mouse
-    
+    text_opts := s.text_options
+    opts      := s.ui_options
+
+    if input.id == 0 { input.id = NextStaticId(s) }
+
     DrawBorderInset(pos, size, opts.input.border_dark, opts.input.border_bright)
 
     if len(input.text) == 0 {
         text_opts := text_opts
         text_opts.color = opts.input.placeholder_fg
-        DrawTextBasic(input.placeholder, pos, text_opts)
+        DrawTextBasic(input.placeholder, pos, s)
     }
 
     if  rl.IsMouseButtonPressed(.LEFT) && 
-        rl.CheckCollisionPointRec(mouse, { pos.x, pos.y, size.x, size.y }) &&
+        rl.CheckCollisionPointRec(s.mouse, { pos.x, pos.y, size.x, size.y }) &&
         !IsAnyScrollbarDragged() {
         input.active = true
     } else if rl.IsMouseButtonPressed(.LEFT) {
@@ -372,7 +378,7 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         rl.DrawRectangleV(pos, size, { 0, 0, 0, 25 }) // todo opts.input.active_tint
 
         // !Important!
-        UpdateTextInput(input, pos, size, opts, text_opts)
+        UpdateTextInput(input, pos, size, s)
     }
 
     // When text box is overflowing
@@ -392,8 +398,7 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         rl.DrawRectangleV(pos + { x, 0 } - offset, { w, size.y }, opts.input.selection_bg)
     }
   
-    text_opts := text_opts
-    text_size := DrawTextBasic(string(input.text[:]), pos - offset, text_opts)
+    text_size := DrawTextBasic(string(input.text[:]), pos - offset, s)
 
     if transmute(u64) (pos - offset) == sel_id {
         input.cursor = min(sel_start, len(input.text) - 1)
@@ -401,9 +406,9 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     }
 
     { // Mouse cursor
-        pmouse := mouse - rl.GetMouseDelta()
+        pmouse := s.mouse - rl.GetMouseDelta()
         a := rl.CheckCollisionPointRec(pmouse, { pos.x, pos.y, size.x, size.y })
-        b := rl.CheckCollisionPointRec(mouse,  { pos.x, pos.y, size.x, size.y })
+        b := rl.CheckCollisionPointRec(s.mouse,  { pos.x, pos.y, size.x, size.y })
         if !a && b { rl.SetMouseCursor(.IBEAM) }
         if a && !b { rl.SetMouseCursor(.DEFAULT) }
     }
@@ -421,12 +426,22 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     }
 
     if should_clip { rl.EndScissorMode() }
+
+    DebugDrawInfo(pos, size, input.id, s)
+
 }
 
 // Called automatically, but can still be called by user when the input is actually hidden
-UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, 
-                        opts := DEFAULT_UI_OPTIONS, text_opts := DEFAULT_TEXT_OPTIONS) {
+UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, s: ^State) {
+    if input == nil { return }
+    if s     == nil { return }
+
+    text_opts := s.text_options
+    opts      := s.ui_options
+
     input.events = {}
+
+    if input.id == 0 { input.id = NextId(s) }
 
     // Initialization
     stride := &input.rune_positions
@@ -446,7 +461,7 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
 
         buf, n := utf8.encode_rune(char)
         inject_at_elem_string(buffer, cursor, string(buf[:n]))
-        inject_positions(input, cursor, string(buf[:n]), text_opts)
+        inject_positions(input, cursor, string(buf[:n]), s)
         cursor += n
         select += n
 
@@ -468,17 +483,17 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
 
         if select != cursor {
             hi := max(select, cursor) // as in "hi-fi", a.k.a.: "up to" (I use it elsewhere too)
-            delete_range(input, min(select, cursor), hi, text_opts)
+            delete_range(input, min(select, cursor), hi, s)
             cursor = min(cursor, select)
             select = cursor
         } else if ctrl {
             start := strings.last_index_byte(string(buffer[:cursor-1]), ' ') + 1
-            delete_range(input, start, cursor, text_opts)
+            delete_range(input, start, cursor, s)
             cursor = start
             select = start
         } else {
             size := last_rune_size(buffer[:cursor])
-            delete_range(input, cursor - size, cursor, text_opts)
+            delete_range(input, cursor - size, cursor, s)
             cursor -= size
             select -= size
         }
@@ -490,16 +505,16 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
 
         if select != cursor {
             hi := max(select, cursor) // as in hi-fi, a.k.a.: "to" (I use it elsewhere too)
-            delete_range(input, min(select, cursor), hi, text_opts)
+            delete_range(input, min(select, cursor), hi, s)
             cursor = min(cursor, select)
             select = cursor
         } else if ctrl {
             start := strings.index_byte(string(buffer[cursor:]), ' ') 
             start = len(buffer) if start == -1 else ( start + cursor + 1 )
-            delete_range(input, cursor, start, text_opts)
+            delete_range(input, cursor, start, s)
         } else {
             _, size := utf8.decode_rune(buffer[cursor:])
-            delete_range(input, cursor, cursor + size, text_opts)
+            delete_range(input, cursor, cursor + size, s)
         }
 
         input.events += { .CHANGE }
@@ -583,14 +598,14 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         input.cursor_timeout = opts.input.cursor_blink_rate
 
         if select != cursor {
-            delete_range(input, min(select, cursor), max(select, cursor), text_opts)
+            delete_range(input, min(select, cursor), max(select, cursor), s)
             cursor = min(cursor, select)
             select = cursor
         }
         
         contents := rl.GetClipboardText()
         inject_at_elem_string(buffer, cursor, string(contents))
-        inject_positions(input, cursor, string(contents), text_opts)
+        inject_positions(input, cursor, string(contents), s)
         cursor += len(contents)
         select = cursor
 
@@ -606,14 +621,14 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
 
     // deletes text & rune_positions in lo..<hi
     // recalculates the rune_positions after the deleted segment
-    delete_range :: proc(input: ^TextInput, lo: int, hi: int, text_opts: TextOptions) {
+    delete_range :: proc(input: ^TextInput, lo: int, hi: int, s: ^State) {
         if len(input.text) == 0 { return }
         remove_range(&input.rune_positions, lo + 1, len(input.rune_positions))
-        inject_positions(input, lo, string(input.text[hi - 1:]), text_opts)
+        inject_positions(input, lo, string(input.text[hi - 1:]), s)
         remove_range(&input.text, lo, hi)
     }
 
-    inject_positions :: proc(input: ^TextInput, index: int, str: string, text_opts: TextOptions) {
+    inject_positions :: proc(input: ^TextInput, index: int, str: string, s: ^State) {
         if len(str) == 0 { return }
         positions := &input.rune_positions
         prev_len  := len(str)
@@ -627,7 +642,7 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
         from := positions[index - 1]
 
         for r, i in str {
-            width := MeasureRune(r, {}, text_opts).x
+            width := MeasureRune(r, s).x
             for j in 0..<utf8.rune_size(r) {
                 positions[index + i + j] = from + width
             }
@@ -652,15 +667,20 @@ UpdateTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2,
     }
 }
 
-RefreshTextInput :: proc(input: ^TextInput, text_opts := DEFAULT_TEXT_OPTIONS) {
+RefreshTextInput :: proc(input: ^TextInput, s: ^State) {
+    if input == nil { return }
+    if s     == nil { return }
+
     positions := &input.rune_positions
+
+    if input.id == 0 { input.id = NextId(s) }
 
     runtime.resize(positions, len(input.text) + 1)
     positions[0] = 0
 
     from: f32
     for r, i in string(input.text[:]) {
-        width := MeasureRune(r, {}, text_opts).x
+        width := MeasureRune(r, s).x
         for j in 0..<utf8.rune_size(r) {
             positions[i + j + 1] = from + width
         }
