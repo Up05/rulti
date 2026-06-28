@@ -60,8 +60,9 @@ main :: proc() {
         // time.stopwatch_stop(&s)
         // fmt.println(time.stopwatch_duration(s))
 
-        DrawTextBasic("λ(ℕ)", 0, state)
-        glyph := rl.GetGlyphIndex(font, 'λ')
+        fmt.println(selection, selection_in_progress, "\t", sel_start, sel_end, ":", sel_id)
+
+        DrawTextBasic("λ(ℕ)", { -10, -10 }, state)
 
         state.text_options.selectable = true
         ti.placeholder = "a text input"

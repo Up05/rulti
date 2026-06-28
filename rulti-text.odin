@@ -438,11 +438,11 @@ DrawTextCached :: proc(texture: rl.RenderTexture2D, pos: rl.Vector2, text := "",
                         selection_in_progress = true
                     }
                 }
+            }
 
-                if sel_id == id && i >= min(sel_start, sel_end) && 
-                                   i <= max(sel_start, sel_end) { 
-                    rl.DrawRectangleV(pos + rune_pos, advance, opts.highlight) 
-                }
+            if sel_id == id && i >= min(sel_start, sel_end) && 
+                                i <= max(sel_start, sel_end) { 
+                rl.DrawRectangleV(pos + rune_pos, advance, opts.highlight) 
             }
         
         }
