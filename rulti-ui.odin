@@ -5,7 +5,6 @@ import rl "vendor:raylib"
 import "core:unicode/utf8"
 import "core:strings"
 import "base:runtime"
-import "core:fmt"
 
 /**
     This file contains addons to raylib 
@@ -399,11 +398,6 @@ DrawTextInput :: proc(input: ^TextInput, pos, size: rl.Vector2, s: ^State) {
     }
   
     text_size := DrawTextBasic(string(input.text[:]), pos - offset, s)
-
-    if transmute(u64) (pos - offset) == sel_id {
-        input.cursor = min(sel_start, len(input.text) - 1)
-        input.select = min(sel_end, len(input.text) - 1)
-    }
 
     { // Mouse cursor
         pmouse := s.mouse - rl.GetMouseDelta()

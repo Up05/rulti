@@ -64,7 +64,6 @@ With :: proc(base: ^State,
              line_spacing : Maybe(type_of(base.text_options.line_spacing)) = nil,
              center_x     : Maybe(type_of(base.text_options.center_x    )) = nil,
              center_y     : Maybe(type_of(base.text_options.center_y    )) = nil,
-             selectable   : Maybe(type_of(base.text_options.selectable  )) = nil,
              color        : Maybe(type_of(base.text_options.color       )) = nil,
              background   : Maybe(type_of(base.text_options.background  )) = nil,
     ) -> ^State {
@@ -77,7 +76,6 @@ With :: proc(base: ^State,
     new.text_options.line_spacing = line_spacing .? or_else new.text_options.line_spacing 
     new.text_options.center_x     = center_x     .? or_else new.text_options.center_x     
     new.text_options.center_y     = center_y     .? or_else new.text_options.center_y     
-    new.text_options.selectable   = selectable   .? or_else new.text_options.selectable   
     new.text_options.color        = color        .? or_else new.text_options.color        
     new.text_options.background   = background   .? or_else new.text_options.background   
 

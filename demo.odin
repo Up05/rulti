@@ -60,11 +60,8 @@ main :: proc() {
         // time.stopwatch_stop(&s)
         // fmt.println(time.stopwatch_duration(s))
 
-        fmt.println(selection, selection_in_progress, "\t", sel_start, sel_end, ":", sel_id)
-
         DrawTextBasic("λ(ℕ)", { -10, -10 }, state)
 
-        state.text_options.selectable = true
         ti.placeholder = "a text input"
         DrawTextInput(&ti, { 20, 700 }, { 500, 26 }, state)
 
@@ -72,7 +69,7 @@ main :: proc() {
         // big, scrollable, block of text
         rl.DrawRectangleLinesEx({ 20, 20, 600, 650 }, 2, rl.BLACK)
         rl.BeginScissorMode(20 - i32(main_camera.target.x), 20 - i32(main_camera.target.y), 600, 650)
-        DrawTextCached(big_text, { 20, 20 } - scroll.pos, LOREM, big_text_layout, state)
+        DrawTextCached(big_text, { 20, 20 } - scroll.pos, state)
         rl.EndScissorMode()
         DrawScrollbar(&scroll, { 20, 20 }, { 600, 650 }, state)
 
@@ -92,7 +89,7 @@ main :: proc() {
         DrawCapsule2D({100, -100}, {100, -300}, 50, 16, rl.RED)
         DrawCapsule2D({300, -100}, {450, -300}, 50, 16, rl.BLUE)
 
-        if !selection_in_progress && !IsAnyScrollbarDragged() && rl.IsMouseButtonDown(.LEFT) { 
+        if !IsAnyScrollbarDragged() && rl.IsMouseButtonDown(.LEFT) { 
             main_camera.target -= rl.GetMouseDelta()
         }
         rl.EndMode2D()
