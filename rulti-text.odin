@@ -243,8 +243,7 @@ SplitTextIntoLines :: proc(text: string, box_size: rl.Vector2, s: ^State) -> (li
     return
 }
 
-
-// Slow, generates thousands of draw calls for long text, but is very dynamic.
+// Slow, but very dynamic.
 // Prefer caching, but don't get scared, it's probably fine.
 DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, s: ^State, id: u64 = 0) -> (new_size: rl.Vector2) {
     opts := s.text_options
@@ -336,6 +335,44 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, s: 
     return
 }
 
+LayoutText :: proc(text: string, size: rl.Vector2, allocator := context.allocator, s: ^State) -> (rune_positions: [] rl.Vector2, new_size: rl.Vector2) {
+    opts := s.text_options
+
+    lines := SplitTextIntoLines(text, size, s)
+    defer delete(lines)
+
+    rune_positions = make([] rl.Vector2, len(text))
+
+    pos: rl.Vector2 
+    rune_index: int
+    // Drawing lines 
+    for line, line_index in lines {
+        defer rune_index += len(line)
+        chunk_size := MeasureTextLine(line, s)
+        
+        o: rl.Vector2 // offset
+
+        o.x = (size.x - chunk_size.x) / 2 if opts.center_x else 0
+        o.y = (size.y - (opts.size + opts.line_spacing) * f32(len(lines))) / 2 + opts.size/2 if opts.center_y else 0
+        o.y += f32(line_index) * ( opts.size + opts.line_spacing )
+
+        // Drawing individual characters 
+        for r, i in line {
+            advance := MeasureRune(r, s)
+            if advance == {} do continue
+
+            rune_positions[rune_index + i] = floor_vec(pos + o)
+
+            o.x += advance.x
+            new_size.x = max(new_size.x, o.x)
+        }
+    }
+
+    new_size.y = f32(len(lines)) * ( opts.size + opts.line_spacing )
+    return
+}
+
+
 // 1. You should save the original contents of `text`!
 //    to get text highlighting working. (Also don't forget to save the opts)
 // 2. Either call DrawTextCached()
@@ -355,6 +392,80 @@ CacheTextWrapped :: proc(texture: ^rl.RenderTexture2D, text: string, box_size: r
     return
 }
 
+// Generate the texture for this via CacheTextWrapped
+// Pass the same text and the same options as to CacheTextWrapped
+DrawTextCached :: proc(texture: rl.RenderTexture2D, pos: rl.Vector2, text := "", rune_positions: [] rl.Vector2 = {}, s: ^State, id: u64 = 0) {
+    if s == nil { return }
+    opts := s.text_options
+
+    if len(text) != len(rune_positions) { panic("bad lengths") }
+
+    tex := texture.texture
+    box_size : rl.Vector2 = { f32(tex.width), f32(tex.height) }
+
+    // Basically just copied from DrawTextWrapped. There for selection
+    is_mouse_start   := rl.IsMouseButtonPressed(.LEFT)
+    is_mouse_ongoing := rl.IsMouseButtonDown(.LEFT)
+    
+    id := id
+    if opts.selectable { id = id if id != 0 || !opts.selectable else NextId(s) }
+
+    if opts.selectable && (is_mouse_start || is_mouse_ongoing || sel_id != 0) {
+
+        if sel_id == id && is_mouse_start {
+            sel_id = 0
+            sel_start, sel_end = 0, 0
+            selection_in_progress = false
+        }
+
+        for rune_pos, i in rune_positions {
+            advance := MeasureRune(rune((transmute([] byte) text)[i]), s)
+
+            a := pos + rune_pos
+            b := advance
+            if  opts.selectable && 
+                rl.CheckCollisionPointRec(s.mouse, { pos.x, pos.y, box_size.x, box_size.y }) &&
+                rl.CheckCollisionPointRec(s.mouse, { a.x, a.y, b.x, b.y }) {
+
+                if is_mouse_start {
+                    sel_id = id
+                    sel_start = i
+                    selection_in_progress = true
+                } else if is_mouse_ongoing {
+                    if sel_id == id {
+                        sel_end   = + i
+                        selection = text[min(sel_start, sel_end):max(sel_start, sel_end)]
+                        selection_in_progress = true
+                    }
+                }
+
+                if sel_id == id && i >= min(sel_start, sel_end) && 
+                                   i <= max(sel_start, sel_end) { 
+                    rl.DrawRectangleV(pos + rune_pos, advance, opts.highlight) 
+                }
+            }
+        
+        }
+
+        lines := SplitTextIntoLines(text, box_size, s)
+        defer delete(lines)
+    }
+
+    rl.DrawTextureRec(tex, { 0, 0, f32(tex.width), - f32(tex.height) }, pos, rl.WHITE)
+
+    if opts.selectable {
+        pmouse := s.mouse - rl.GetMouseDelta()
+        rec := rl.Rectangle { pos.x, pos.y, min(box_size.x, f32(tex.width)), min(box_size.y, f32(tex.height)) }
+        a := rl.CheckCollisionPointRec(pmouse, rec)
+        b := rl.CheckCollisionPointRec(s.mouse,  rec)
+        if !a && b { rl.SetMouseCursor(.IBEAM) }
+        if a && !b { rl.SetMouseCursor(.DEFAULT) }
+
+        DebugDrawInfo(pos, box_size, id, s)
+    }
+}
+
+/*
 // Generate the texture for this via CacheTextWrapped
 // Pass the same text and the same options as to CacheTextWrapped
 DrawTextCached :: proc(texture: rl.RenderTexture2D, pos: rl.Vector2, original_text := "", original_state : ^State = nil, id: u64 = 0) {
@@ -446,6 +557,9 @@ DrawTextCached :: proc(texture: rl.RenderTexture2D, pos: rl.Vector2, original_te
         DebugDrawInfo(pos, box_size, id, original_state)
     }
 }
+
+*/
+
 
 // These are probably correct, I didn't really check
 // 0x024F = end of Latin Extended-B

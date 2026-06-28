@@ -38,6 +38,7 @@ main :: proc() {
 
     big_text: rl.RenderTexture2D
     new_size := CacheTextWrapped(&big_text, LOREM, { 600, 850 }, {}, state)
+    big_text_layout, _size1 := LayoutText(LOREM, { 600, 850 }, s = state)
     scroll: Scroll = { max = new_size }
 
     state.debug = true
@@ -70,7 +71,7 @@ main :: proc() {
         // big, scrollable, block of text
         rl.DrawRectangleLinesEx({ 20, 20, 600, 650 }, 2, rl.BLACK)
         rl.BeginScissorMode(20 - i32(main_camera.target.x), 20 - i32(main_camera.target.y), 600, 650)
-        DrawTextCached(big_text, { 20, 20 } - scroll.pos, LOREM, state)
+        DrawTextCached(big_text, { 20, 20 } - scroll.pos, LOREM, big_text_layout, state)
         rl.EndScissorMode()
         DrawScrollbar(&scroll, { 20, 20 }, { 600, 650 }, state)
 
@@ -82,6 +83,9 @@ main :: proc() {
 
         // bottom right text
         DrawTextWrapped("Abcd_efgh\n_ijkl_mnop rstu", { 430, 760 }, { size_x, 240 }, With(state, center_x = true))
+
+        rpos, _size2 := LayoutText("Abcd_efgh\n_ijkl_mnop rstu", { size_x, 240 }, allocator = context.temp_allocator, s = With(state, center_x = true))
+        for r in rpos { rl.DrawRectangleV(r + { 430, 760 }, { 4, 4 }, rl.RED) }
 
         // off-screen capsules/"stadiums" (drag screen with mouse to move)
         DrawCapsule2D({100, -100}, {100, -300}, 50, 16, rl.RED)
