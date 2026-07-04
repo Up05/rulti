@@ -2,6 +2,9 @@
 package rulti
 
 import rl "vendor:raylib"
+import "core:unicode"
+import "core:strings"
+import "core:fmt"
 
 TextOptions :: struct {
     fallback_fonts : [dynamic; #config(RULTI_MAX_FALLBACK_FONTS, 8)] rl.Font,
@@ -29,6 +32,28 @@ DEFAULT_TEXT_OPTIONS : TextOptions = {
     background   = {},
 }
 
+// 0x7F   = end of ASCII
+// 0x024F = end of Latin Extended-B
+// SDF allows for better scaling of the font when compared to default(rasterization)
+// Do not use Raylib with system fonts! Vendor your fonts!
+LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_count := 0x024F, filter := rl.TextureFilter.TRILINEAR) -> rl.Font {
+    font: rl.Font
+
+    font.baseSize = i32(text_size)
+    font.glyphCount = 25000
+    
+    font.glyphs = rl.LoadFontData(transmute(rawptr) raw_data(data), i32(len(data)), 
+                  font.baseSize, nil, font.glyphCount, .SDF if SDF else .DEFAULT);
+
+    atlas := rl.GenImageFontAtlas(font.glyphs, &font.recs, font.glyphCount, font.baseSize, 4, 0);
+    font.texture = rl.LoadTextureFromImage(atlas);
+    rl.UnloadImage(atlas);
+
+    rl.SetTextureFilter(font.texture, filter)
+    
+    return font
+}
+
 GetFontWithRune :: proc(r: rune, s: ^State) -> (font: rl.Font, ok: bool) {
     opts := s.text_options
     glyph := rl.GetGlyphIndex(opts.font, r)
@@ -46,7 +71,6 @@ GetFontWithRune :: proc(r: rune, s: ^State) -> (font: rl.Font, ok: bool) {
     return {}, false
 }
 
-
 // Returns the size of a rune accounted for TextOptions.
 // '\n' and other non-printable ascii chars are ignored.
 MeasureRune :: proc(r: rune, s: ^State) -> (advance: rl.Vector2) {
@@ -60,9 +84,11 @@ MeasureRune :: proc(r: rune, s: ^State) -> (advance: rl.Vector2) {
     
     // Advance
     glyph := rl.GetGlyphIndex(font, r)
-    advance1 := f32(font.glyphs[glyph].advanceX)
-    advance.x += (advance1 if advance1 != 0 else font.recs[glyph].width) * scaling + opts.spacing
-    advance.y = opts.size + opts.line_spacing
+    advance_x := f32(font.glyphs[glyph].advanceX)
+    if advance_x == 0 { advance_x = font.recs[glyph].width }
+
+    advance.x += advance_x * scaling + opts.spacing
+    advance.y  = opts.size + opts.line_spacing
 
     return
 }
@@ -72,8 +98,8 @@ MeasureRune :: proc(r: rune, s: ^State) -> (advance: rl.Vector2) {
 // '\n' are ignored.
 MeasureTextLine :: proc(text: string, s: ^State) -> (text_size: rl.Vector2) {
     opts := s.text_options
-    for r, i in text { text_size += MeasureRune(r, s) }
-    text_size.y = opts.size + opts.line_spacing
+    #no_bounds_check for r, i in text { text_size += MeasureRune(r, s) }
+    text_size.y = opts.size + opts.line_spacing // not unnecessary.
     return
 }
 
@@ -108,7 +134,7 @@ DrawRune :: proc(r: rune, pos: rl.Vector2, s: ^State) {
 
 
 // Draws a single line text. No centering, selection or '\n' handling.
-DrawTextBasic :: proc(text: string, pos: rl.Vector2, s: ^State, id: u64 = 0) -> (text_size: rl.Vector2) {
+DrawTextBasic :: proc(text: string, pos: rl.Vector2, s: ^State) -> (text_size: rl.Vector2) {
     opts := s.text_options
         
     offset: rl.Vector2
@@ -125,94 +151,33 @@ DrawTextBasic :: proc(text: string, pos: rl.Vector2, s: ^State, id: u64 = 0) -> 
     return { offset.x, opts.size + opts.line_spacing }
 }
 
-// Less useful for user. Wraps text into new lines.
-SplitTextIntoLines :: proc(text: string, box_size: rl.Vector2, s: ^State) -> (lines: [dynamic] string) {
-    opts := s.text_options
-    text := text
-    lines = make([dynamic] string, context.allocator)
-    cursor : int
-    pcursor: int // previous cursor
-    for {
-        cursor = find_space_from(text, cursor + 1)
-        defer pcursor = cursor
-        
-        chunk_size := MeasureTextLine(text[:cursor], s)
-
-        // Automatic text wrapping
-        if chunk_size.x >= box_size.x {
-            // Single word wrapping
-            if pcursor == 0 {
-                x: f32
-                p: int // previous i
-                for r, i in text[:cursor] {
-                    x += MeasureRune(r, s).x
-                    if x >= box_size.x {
-                        append(&lines, text[p:i])
-                        p = i + 1
-                        x = 0
-                    }
-                }
-            
-                append(&lines, text[p:cursor])
-                text = text[cursor:]
-            } else {
-                // Wrapping over non-printable characters & space
-                append(&lines, text[:pcursor])
-                text = text[pcursor:]
-            }
-            pcursor = 0
-            cursor = 0
-        }
-
-        // New line characters
-        if cursor < len(text) {
-            // TODO is this even necessary?
-            if text[cursor] == '\r' { // Windows: \r\n
-                append(&lines, text[:cursor])
-                text = text[cursor + 1:]
-                pcursor = 0
-                cursor  = 0
-
-            } else if text[cursor] == '\n' { // Else: \n
-                append(&lines, text[:cursor])
-                text = text[cursor:]
-                pcursor = 0
-                cursor  = 0
-            }
-        }
-        
-        if cursor >= len(text) - 1 {
-            append(&lines, text)
-            break
-        }
-    }
-
-    return
-}
-
 // Slow, but very dynamic.
 // Prefer caching, but don't get scared, it's probably fine.
-DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, s: ^State, id: u64 = 0) -> (new_size: rl.Vector2) {
+DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, s: ^State) -> (new_size: rl.Vector2) {
     opts := s.text_options
     original_text := text
     text  := text
 
-    lines := SplitTextIntoLines(text, box_size, s)
-    defer delete(lines)
+    // lines := SplitTextIntoLines(text, box_size, s)
+    // defer delete(lines)
+    fmt.println()
 
-    // --------------------- Drawing + selection --------------------- 
-
-    pos := pos
-    rune_index: int
     // Drawing lines 
-    for line, line_index in lines {
+    text_iterator := text
+    rune_index    : int
+    line_index    : int
+    for line in IterateNextVisualLine(&text_iterator, box_size.x, s) {
+        // I should skip the non-printable characters right here?
+        // but then... I shouldn't skip punctuation here (maybe that's fine)
+        fmt.println(line)
+        defer line_index += 1
         defer rune_index += len(line)
         chunk_size := MeasureTextLine(line, s)
         
         o: rl.Vector2 // offset
 
-        o.x = (box_size.x - chunk_size.x) / 2 if opts.center_x else 0
-        o.y = (box_size.y - (opts.size + opts.line_spacing) * f32(len(lines))) / 2 + opts.size/2 if opts.center_y else 0
+        if opts.center_x { o.x = (box_size.x - chunk_size.x) / 2 }             //   \/ len(lines) ???
+        if opts.center_y { o.y = (box_size.y - (opts.size + opts.line_spacing) * f32(1)) / 2 + opts.size/2 }
         o.y += f32(line_index) * ( opts.size + opts.line_spacing )
 
         // Drawing individual characters 
@@ -228,50 +193,18 @@ DrawTextWrapped :: proc(text: string, pos: rl.Vector2, box_size: rl.Vector2, s: 
         }
     }
 
-    new_size.y = f32(len(lines)) * ( opts.size + opts.line_spacing )
+    new_size.y = f32(line_index) * ( opts.size + opts.line_spacing )
 
     return
 }
 
-// Calculates the position of every rune in a wrapped text
-// This allows you to use DrawTextFromLayout, to implement text highlighting and more
-LayoutText :: proc(text: string, size: rl.Vector2, allocator := context.allocator, s: ^State) -> (rune_positions: [] rl.Vector2, new_size: rl.Vector2) {
-    opts := s.text_options
-
-    lines := SplitTextIntoLines(text, size, s)
-    defer delete(lines)
-
-    rune_positions = make([] rl.Vector2, len(text))
-
-    pos: rl.Vector2 
-    rune_index: int
-    // Drawing lines 
-    for line, line_index in lines {
-        defer rune_index += len(line)
-        chunk_size := MeasureTextLine(line, s)
-        
-        o: rl.Vector2 // offset
-
-        o.x = (size.x - chunk_size.x) / 2 if opts.center_x else 0
-        o.y = (size.y - (opts.size + opts.line_spacing) * f32(len(lines))) / 2 + opts.size/2 if opts.center_y else 0
-        o.y += f32(line_index) * ( opts.size + opts.line_spacing )
-
-        // Drawing individual characters 
-        for r, i in line {
-            advance := MeasureRune(r, s)
-            if advance == {} do continue
-
-            rune_positions[rune_index + i] = floor_vec(pos + o)
-
-            o.x += advance.x
-            new_size.x = max(new_size.x, o.x)
-        }
+DrawTextWithLayout :: proc(text: string, rune_positions: [] rl.Vector2, pos: rl.Vector2, s: ^State) {
+    for r, i in text {
+        if i >= len(rune_positions) { return }
+        if r < ' ' { continue } 
+        DrawRune(r, pos + rune_positions[i], s)
     }
-
-    new_size.y = f32(len(lines)) * ( opts.size + opts.line_spacing )
-    return
 }
-
 
 // 1. You should save the original contents of `text`!
 //    to get text highlighting working. (Also don't forget to save the opts)
@@ -299,30 +232,159 @@ DrawTextCached :: proc(texture: rl.RenderTexture2D, pos: rl.Vector2, s: ^State =
     rl.DrawTextureRec(tex, { 0, 0, f32(tex.width), - f32(tex.height) }, pos, rl.WHITE)
 }
 
+IterateNextVisualLine :: proc(text: ^string, width: f32, s: ^State) -> (line: string, ok: bool) {
+    opts := s.text_options
 
-// These are probably correct, I didn't really check
-// 0x024F = end of Latin Extended-B
-// 0x7F   = end of ASCII
-// for others: https://en.wikipedia.org/wiki/List_of_Unicode_characters
-// SDF allows for better scaling of the font when compared to default(rasterization)
-LoadFontFromMemory :: proc(data: [] byte, text_size: int, SDF := false, glyph_count := 0x024F, filter := rl.TextureFilter.TRILINEAR) -> rl.Font {
-    font: rl.Font
-
-    font.baseSize = i32(text_size)
-    font.glyphCount = 25000
+    if len(text) == 0 { return "", false }
     
-    font.glyphs = rl.LoadFontData(transmute(rawptr) raw_data(data), i32(len(data)), 
-                  font.baseSize, nil, font.glyphCount, .SDF if SDF else .DEFAULT);
+    x: f32
+    for r, i in text {
+        x += MeasureRune(r, s).x
 
-    atlas := rl.GenImageFontAtlas(font.glyphs, &font.recs, font.glyphCount, font.baseSize, 4, 0);
-    font.texture = rl.LoadTextureFromImage(atlas);
-    rl.UnloadImage(atlas);
+        if r == '\n' {
+            line  = text[:i]
+            text^ = text[i:]
+            return line, len(line) > 0
+        }
 
-    rl.SetTextureFilter(font.texture, filter)
-    
-    return font
+        // :(
+        for iterate_punctuation {
+        
+        
+        }
+
+        // prefer split on spaces && punctuation
+        if unicode.is_punct(r) /* || unicode.is_space(r) */ {
+            next_punct  := find_next_punct_from(text^, i + 1)
+            next_chunk  := text[i + 1:next_punct]
+            chunk_width := MeasureTextLine(next_chunk, s).x if next_punct < len(text^) else 0
+
+            if x + chunk_width >= width {
+                fmt.println("!", next_chunk)
+                line  = text[i:]
+                text^ = text[:i]
+                return line, len(line) > 0
+            }
+        }
+
+        // split individual characters
+        if x >= width {
+            line  = text[:i]
+            text^ = text[i:]
+            return line, len(line) > 0
+        }
+    }
+
+    line  = text^
+    text^ = text[len(text):]
+    return line, len(line) > 0
+
+    find_next_punct_from :: proc(str: string, offset: int) -> int {
+        if offset >= len(str) do return len(str)
+
+        one_basic: bool // does this shit work?
+        for r, i in str[offset:] {
+            if !unicode.is_punct(r)  { one_basic = true; fmt.println("not punct:", r);  }
+            if  unicode.is_punct(r) && one_basic { return i + offset }
+        }
+        return len(str)
+    }
 }
 
+// Less useful for user. Wraps text into new lines.
+SplitTextIntoLines :: proc(text: string, box_size: rl.Vector2, s: ^State, allocator := context.allocator) -> (lines: [dynamic] string) {
+    opts := s.text_options
+    text := text
+    lines = make([dynamic] string, 0, int(f32(len(text)) / (box_size.x / MeasureRune(' ', s).x)) + 4, allocator)
+    // defer fmt.println(lines)
+
+    cursor      : int
+    pcursor     : int // previous cursor
+
+    for {
+        cursor = find_space_from(text, cursor + 1)
+        defer pcursor = cursor
+        
+        chunk_size := MeasureTextLine(text[:cursor], s)
+
+        // Automatic text wrapping
+        if chunk_size.x >= box_size.x {
+            // Single word wrapping
+            if pcursor == 0 {
+                x: f32
+                p: int // previous i
+                for r, i in text[:cursor] {
+                    x += MeasureRune(r, s).x
+                    if x >= box_size.x {
+                        append(&lines, strings.trim_left_space(text[p:i])) // <-- this is bad because it doesn't preserve runes
+                        p = i + 1
+                        x = 0
+                    }
+                }
+            
+                append(&lines, text[p:cursor])
+                text = text[cursor:]
+            } else {
+                // Wrapping over non-printable characters & space
+                append(&lines, strings.trim_left_space(text[:pcursor]))
+                text = text[pcursor:]
+            }
+            pcursor = 0
+            cursor = 0
+        }
+
+        // New line characters
+        if cursor < len(text) {
+            if text[cursor] == '\n' { // Else: \n
+                append(&lines, text[:cursor])
+                text = text[cursor:]
+                pcursor = 0
+                cursor  = 0
+            }
+        }
+        
+        if cursor >= len(text) - 1 {
+            append(&lines, text)
+            break
+        }
+    }
+
+    return
+}
+
+// Calculates the position of every rune in a wrapped text
+// This allows you to use DrawTextFromLayout, to implement text highlighting and more
+LayoutText :: proc(text: string, size: rl.Vector2, allocator := context.allocator, s: ^State) -> (rune_positions: [] rl.Vector2, new_size: rl.Vector2) {
+    opts := s.text_options
+
+    lines := SplitTextIntoLines(text, size, s)
+    defer delete(lines)
+
+    rune_positions = make([] rl.Vector2, len(text))
+
+    // Drawing lines 
+    rune_index: int
+    pos: rl.Vector2 
+    for line, line_index in lines {
+        defer rune_index += len(line)
+        chunk_size := MeasureTextLine(line, s)
+        
+        o: rl.Vector2 // offset
+
+        o.x = (size.x - chunk_size.x) / 2 if opts.center_x else 0
+        o.y = (size.y - (opts.size + opts.line_spacing) * f32(len(lines))) / 2 + opts.size/2 if opts.center_y else 0
+        o.y += f32(line_index) * ( opts.size + opts.line_spacing )
+
+        // Drawing individual characters 
+        for r, i in line {
+            rune_positions[rune_index + i] = floor_vec(pos + o)
+            new_size.x = max(new_size.x, o.x)
+            o.x += MeasureRune(r, s).x
+        }
+    }
+    new_size.y = f32(len(lines)) * ( opts.size + opts.line_spacing )
+    return
+}
 
 
 @(private="file")
@@ -334,13 +396,14 @@ floor_vec :: proc(pos: rl.Vector2) -> rl.Vector2 {
 @(private="file")
 find_space_from :: proc(str: string, offset: int) -> int {
     if offset >= len(str) do return len(str)
+
+    one_non_space: bool
     for r, i in str[offset:] {
-        if r <= ' ' do return i + offset
+        if r >  ' '  { one_non_space = true }
+        if r <= ' ' && one_non_space { return i + offset }
     }
     return len(str)
 }
-
-
 
 /*
     // id := id

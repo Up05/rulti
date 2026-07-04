@@ -74,8 +74,12 @@ main :: proc() {
         DrawScrollbar(&scroll, { 20, 20 }, { 600, 650 }, state)
 
         // bottom left text
+        curr_time := rl.GetTime()
+        @static delta := 0.0 
+        delta = delta if rl.IsKeyDown(.SPACE) else curr_time
+
         size_x: f32 = 150
-        size_x = math.abs(math.sin_f32(f32(rl.GetTime() / 2)) * 300)
+        size_x = math.abs(math.sin_f32(f32(delta / 2)) * 300)
         rl.DrawRectangleLinesEx(                     { 130, 760,     size_x, 240 }, 2, rl.BLACK)
         DrawTextWrapped("Abcd_efgh_ijkl_mnop rstu",  { 130, 760 }, { size_x, 240 }, With(state, background = rl.ORANGE))
 
@@ -84,6 +88,7 @@ main :: proc() {
 
         rpos, _size2 := LayoutText("Abcd_efgh\n_ijkl_mnop rstu", { size_x, 240 }, allocator = context.temp_allocator, s = With(state, center_x = true))
         for r in rpos { rl.DrawRectangleV(r + { 430, 760 }, { 4, 4 }, rl.RED) }
+        DrawTextWithLayout("Abcd_efgh\n_ijkl_mnop rstu", rpos, { 430 + 100, 760 + 80 }, s = With(state, center_x = true))
 
         // off-screen capsules/"stadiums" (drag screen with mouse to move)
         DrawCapsule2D({100, -100}, {100, -300}, 50, 16, rl.RED)
@@ -103,7 +108,7 @@ main :: proc() {
 }
 
 LOREM :: `
-Ar katės lizde. Mauris skurdo plano pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
+Ar katės lizde. Mauris skurdo plano          pagalvė. Ežere nėra neapykantos, rutrumas – prakeiksmas, jaunystė – prakeiksmas, jaunystė – prakeikimas. Tai visada malonumas ir palaima. Enėjas liūdi tik neapykantos didžiausiems taikiniams. Nelengva užduotis.
 
 Dėl minkštų ir minkštų, ir malonių, malonių. Kartais namuose, net gyvenimo partneriai. Kiekvienos mielės nėra nei grynos, nei baltyminės. Jokio sijono, išskyrus lorem, o mielių katinas liūdnas nei. Kai kurie gali būti laisvi arba neturi ribų. Pellentesque ultrices cursus ex, quiver hendrerit lorem commodo, niekur kitur nepriskirtas. Rytoj nešiko draugai užsiėmę.
 
