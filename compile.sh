@@ -1,2 +1,3 @@
 #!/bin/sh
-odin build . -debug -linker:mold && ./rulti
+odin build . -debug -linker:mold -o:speed -no-bounds-check && ./rulti
+# -o:speed -no-bounds-check

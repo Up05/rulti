@@ -130,6 +130,8 @@ Scroll :: struct {
     id        : u64,
 }
 
+// Draw and Update procs should take "is_focused"
+
 @private
 dragged_scrollbar_id: u64
 @private
